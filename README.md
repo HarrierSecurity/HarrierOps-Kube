@@ -27,6 +27,12 @@ Later-depth surface, not part of the current runnable Phase 1 core:
 
 - `images`
 
+## Releases
+
+Tagged releases publish prebuilt binaries through GitHub Releases.
+Release artifacts include macOS binaries for both Apple Silicon (`darwin-arm64`) and Intel
+(`darwin-amd64`), plus Linux and Windows builds.
+
 ## CLI Invocation
 
 Shared flags include `--context`, `--namespace`, `--output`, `--outdir`, and `--debug`.

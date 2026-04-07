@@ -1,0 +1,168 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+      - name: Smoke-test fixture execution
+        run: |
+          set -euo pipefail
+          go build -o /tmp/harrierops-kube ./cmd/harrierops-kube
+          HARRIEROPS_KUBE_FIXTURE_DIR=testdata/fixtures/lab_cluster \
+            /tmp/harrierops-kube \
+            --outdir /tmp/harrierops-kube-release-smoke \
+            --output json \
+            whoami \
+            >/dev/null
+
+  build:
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            archive_ext: tar.gz
+            binary_ext: ""
+          - goos: darwin
+            goarch: arm64
+            archive_ext: tar.gz
+            binary_ext: ""
+          - goos: linux
+            goarch: amd64
+            archive_ext: tar.gz
+            binary_ext: ""
+          - goos: linux
+            goarch: arm64
+            archive_ext: tar.gz
+            binary_ext: ""
+          - goos: windows
+            goarch: amd64
+            archive_ext: zip
+            binary_ext: .exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          mkdir -p dist pkg
+          binary_name="harrierops-kube${{ matrix.binary_ext }}"
+          package_root="harrierops-kube-${{ matrix.goos }}-${{ matrix.goarch }}"
+          package_dir="pkg/${package_root}"
+
+          go build -trimpath -ldflags="-s -w" -o "${package_dir}/${binary_name}" ./cmd/harrierops-kube
+          cp README.md LICENSE CONTRIBUTORS.md "${package_dir}/"
+
+          if [ "${{ matrix.archive_ext }}" = "zip" ]; then
+            (cd pkg && zip -r "../dist/${package_root}.zip" "${package_root}" >/dev/null)
+          else
+            tar -C pkg -czf "dist/${package_root}.tar.gz" "${package_root}"
+          fi
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  checksums:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          shasum -a 256 * > SHA256SUMS
+
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-checksums
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+
+  github-release:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - checksums
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets=(dist/*)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found in dist/" >&2
+            exit 1
+          fi
+
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
+              --generate-notes \
+              --title "${GITHUB_REF_NAME}" \
+              --verify-tag
+          fi
