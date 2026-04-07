@@ -1,8 +1,21 @@
 {
-  "docker": {
-    "available": true,
-    "context_name": "default"
+  "current_identity": {
+    "confidence": "direct",
+    "kind": "User",
+    "label": "fox-operator"
   },
+  "environment_hint": {
+    "confidence": "heuristic",
+    "evidence": [
+      "The visible API endpoint is an internal-style address without strong managed-cluster branding."
+    ],
+    "summary": "The visible API endpoint looks private or lab-shaped rather than strongly managed-service-branded.",
+    "type": "self-managed-like"
+  },
+  "identity_evidence": [
+    "The active kubeconfig context names user 'fox-operator'.",
+    "The current auth path shows an exec-plugin style kubeconfig flow."
+  ],
   "issues": [],
   "kube_context": {
     "cluster_name": "lab-cluster",
@@ -13,12 +26,19 @@
     "user": "fox-operator"
   },
   "metadata": {
+    "cluster_name": "lab-cluster",
     "command": "whoami",
     "context_name": "lab-cluster",
-    "cluster_name": "lab-cluster",
-    "namespace": "default",
     "docker_context": "default",
-    "generated_at": "2026-04-07T02:06:48Z",
+    "generated_at": "2026-04-07T23:14:44Z",
+    "namespace": "default",
     "schema_version": "1.0.0"
-  }
+  },
+  "session": {
+    "auth_material_type": "exec-plugin",
+    "execution_origin": "outside-cluster",
+    "foothold_family": "cloud-bridged",
+    "visibility_scope": "cluster-scoped"
+  },
+  "visibility_blockers": []
 }

@@ -1,4 +1,18 @@
-docker        {"available":true,"context_name":"default"}
-issues        []
-kube_context  {"cluster_name":"lab-cluster","current_context":"lab-cluster","namespace":"default","server":"https://10.0.0.1:6443","server_version":"v1.30.1","user":"fox-operator"}
-metadata      {"command":"whoami","context_name":"lab-cluster","cluster_name":"lab-cluster","namespace":"default","docker_context":"default","generated_at":"2026-04-07T02:06:48Z","schema_version":"1.0.0"}
+Cluster                 lab-cluster
+API Server              https://10.0.0.1:6443
+Context                 lab-cluster
+Namespace               default
+Kubeconfig User         fox-operator
+Server Version          v1.30.1
+Identity                fox-operator
+Identity Kind           User
+Identity Confidence     direct
+Foothold Family         cloud-bridged
+Auth Material           exec-plugin
+Execution Origin        outside-cluster
+Visibility Scope        cluster-scoped
+Environment Hint        The visible API endpoint looks private or lab-shaped rather than strongly managed-service-branded.
+Environment Type        self-managed-like
+Environment Confidence  heuristic
+Environment Evidence    The visible API endpoint is an internal-style address without strong managed-cluster branding.
+Identity Evidence       The active kubeconfig context names user 'fox-operator'.; The current auth path shows an exec-plugin style kubeconfig flow.

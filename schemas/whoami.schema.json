@@ -1,4 +1,4 @@
 {
   "model": "WhoAmIOutput",
-  "top_level_fields": ["metadata", "kube_context", "docker", "issues"]
+  "top_level_fields": ["metadata", "kube_context", "current_identity", "session", "environment_hint", "identity_evidence", "visibility_blockers", "issues"]
 }

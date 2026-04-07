@@ -71,6 +71,49 @@ func TestWhoAmIAppliesOverrides(t *testing.T) {
 	}
 }
 
+func TestWhoAmILoadsInferredAndBlockedIdentityCases(t *testing.T) {
+	testCases := []struct {
+		name           string
+		fixtureDir     string
+		wantConfidence string
+		wantLabel      string
+	}{
+		{
+			name:           "inferred",
+			fixtureDir:     absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "whoami_cases", "inferred")),
+			wantConfidence: "inferred",
+			wantLabel:      "system:serviceaccount:payments:api",
+		},
+		{
+			name:           "blocked",
+			fixtureDir:     absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "whoami_cases", "blocked")),
+			wantConfidence: "blocked",
+			wantLabel:      "unknown current identity",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider, err := NewFixtureProvider(tc.fixtureDir)
+			if err != nil {
+				t.Fatalf("NewFixtureProvider() error = %v", err)
+			}
+
+			data, err := provider.WhoAmI(QueryOptions{})
+			if err != nil {
+				t.Fatalf("WhoAmI() error = %v", err)
+			}
+
+			if data.CurrentIdentity.Confidence != tc.wantConfidence {
+				t.Fatalf("CurrentIdentity.Confidence = %q, want %s", data.CurrentIdentity.Confidence, tc.wantConfidence)
+			}
+			if data.CurrentIdentity.Label != tc.wantLabel {
+				t.Fatalf("CurrentIdentity.Label = %q, want %s", data.CurrentIdentity.Label, tc.wantLabel)
+			}
+		})
+	}
+}
+
 func TestRBACBindingsDecodeNormalizedGrantRows(t *testing.T) {
 	provider := newFixtureProvider(t)
 
@@ -92,7 +135,7 @@ func TestRBACBindingsDecodeNormalizedGrantRows(t *testing.T) {
 	}
 }
 
-func TestServiceAccountsRestoresReferenceFindingsWhenFixturesAreThin(t *testing.T) {
+func TestServiceAccountsLoadFixtureFindings(t *testing.T) {
 	provider := newFixtureProvider(t)
 
 	data, err := provider.ServiceAccounts(QueryOptions{})
@@ -111,14 +154,20 @@ func TestServiceAccountsRestoresReferenceFindingsWhenFixturesAreThin(t *testing.
 func newFixtureProvider(t *testing.T) Provider {
 	t.Helper()
 
-	fixtureDir, err := filepath.Abs(filepath.Join("..", "..", "testdata", "fixtures", "lab_cluster"))
-	if err != nil {
-		t.Fatalf("filepath.Abs(): %v", err)
-	}
-
+	fixtureDir := absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "lab_cluster"))
 	provider, err := NewFixtureProvider(fixtureDir)
 	if err != nil {
 		t.Fatalf("NewFixtureProvider() error = %v", err)
 	}
 	return provider
+}
+
+func absPath(t *testing.T, path string) string {
+	t.Helper()
+
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatalf("filepath.Abs(): %v", err)
+	}
+	return absolute
 }

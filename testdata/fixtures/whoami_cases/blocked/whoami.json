@@ -1,0 +1,43 @@
+{
+  "kube_context": {
+    "current_context": "shared-lab",
+    "cluster_name": "shared-lab",
+    "user": "",
+    "namespace": "default",
+    "server": "https://172.16.0.25:6443",
+    "server_version": "v1.28.3"
+  },
+  "current_identity": {
+    "label": "unknown current identity",
+    "kind": "Unknown",
+    "confidence": "blocked"
+  },
+  "session": {
+    "auth_material_type": "unknown",
+    "execution_origin": "outside-cluster",
+    "foothold_family": "unknown",
+    "visibility_scope": "unknown"
+  },
+  "environment_hint": {
+    "type": "self-managed-like",
+    "confidence": "heuristic",
+    "summary": "The visible API endpoint looks private or lab-shaped rather than strongly managed-service-branded.",
+    "evidence": [
+      "The visible API endpoint is an internal-style address without strong managed-cluster branding."
+    ]
+  },
+  "identity_evidence": [
+    "The active cluster context is readable, but no trustworthy user or service account marker is visible."
+  ],
+  "visibility_blockers": [
+    "Current scope does not confirm which Kubernetes identity this session is using.",
+    "The current auth material type could not be read from visible session clues."
+  ],
+  "issues": [
+    {
+      "kind": "visibility",
+      "message": "Current session could not prove the acting identity.",
+      "scope": "identity"
+    }
+  ]
+}

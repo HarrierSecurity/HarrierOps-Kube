@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+python3 scripts/validate_publish_metadata.py --branch "${branch}"
+
+if [[ "${branch}" == "main" && "${HARRIEROPS_KUBE_ALLOW_MAIN_PUSH:-0}" != "1" ]]; then
+  echo "[guardrail] Direct pushes to main are blocked. Use a feature branch + PR." >&2
+  echo "[guardrail] Override intentionally with HARRIEROPS_KUBE_ALLOW_MAIN_PUSH=1." >&2
+  exit 1
+fi
+
+echo "[guardrail] Checking gofmt..."
+unformatted="$(gofmt -l ./cmd ./internal)"
+if [[ -n "${unformatted}" ]]; then
+  echo "[guardrail] The following files need gofmt:" >&2
+  echo "${unformatted}" >&2
+  exit 1
+fi
+
+echo "[guardrail] Running tests..."
+go test ./...
+
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "[guardrail] Running gitleaks..."
+  gitleaks detect --source . --redact
+else
+  echo "[guardrail] Skipping local gitleaks because it is not installed; CI still enforces secret scanning."
+fi
+
+echo "[guardrail] pre-push checks passed."

@@ -1,4 +1,62 @@
 {
+  "findings": [
+    {
+      "description": "Workload 'default/fox-admin' runs one or more containers in privileged mode.",
+      "id": "workload-privileged-pod:default:fox-admin",
+      "related_ids": ["pod:default:fox-admin"],
+      "severity": "high",
+      "title": "Privileged workload detected"
+    },
+    {
+      "description": "Workload 'default/fox-admin' allows privilege escalation.",
+      "id": "workload-allow-priv-esc-pod:default:fox-admin",
+      "related_ids": ["pod:default:fox-admin"],
+      "severity": "high",
+      "title": "Privilege escalation is allowed"
+    },
+    {
+      "description": "Workload 'default/fox-admin' mounts host paths (/, /var/run/docker.sock).",
+      "id": "workload-hostpath-pod:default:fox-admin",
+      "related_ids": ["pod:default:fox-admin"],
+      "severity": "high",
+      "title": "HostPath mount detected"
+    },
+    {
+      "description": "Workload 'default/fox-admin' explicitly sets a root UID.",
+      "id": "workload-root-pod:default:fox-admin",
+      "related_ids": ["pod:default:fox-admin"],
+      "severity": "medium",
+      "title": "Workload explicitly runs as root"
+    },
+    {
+      "description": "Workload 'default/fox-admin' adds Linux capabilities (SYS_ADMIN).",
+      "id": "workload-capabilities-pod:default:fox-admin",
+      "related_ids": ["pod:default:fox-admin"],
+      "severity": "medium",
+      "title": "Linux capabilities added to workload"
+    },
+    {
+      "description": "Workload 'default/fox-admin' mounts the Docker socket.",
+      "id": "workload-docker-socket-pod:default:fox-admin",
+      "related_ids": ["pod:default:fox-admin"],
+      "severity": "high",
+      "title": "Docker socket mounted into workload"
+    },
+    {
+      "description": "Workload 'build/node-debug' shares one or more host namespaces.",
+      "id": "workload-host-namespaces-pod:build:node-debug",
+      "related_ids": ["pod:build:node-debug"],
+      "severity": "high",
+      "title": "Workload uses host namespaces"
+    },
+    {
+      "description": "Workload 'build/node-debug' mounts host paths (/var/lib/kubelet).",
+      "id": "workload-hostpath-pod:build:node-debug",
+      "related_ids": ["pod:build:node-debug"],
+      "severity": "high",
+      "title": "HostPath mount detected"
+    }
+  ],
   "workload_assets": [
     {
       "id": "pod:default:fox-admin",
