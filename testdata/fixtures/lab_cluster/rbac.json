@@ -1,37 +1,84 @@
 {
-  "role_grants": [
+  "cluster_roles": [
     {
-      "id": "ClusterRoleBinding:_cluster:harrierops-kube-lab-cluster-admin:ServiceAccount:fox-admin",
-      "binding_kind": "ClusterRoleBinding",
-      "binding_name": "harrierops-kube-lab-cluster-admin",
-      "namespace": null,
-      "role_kind": "ClusterRole",
-      "role_name": "cluster-admin",
-      "subject_kind": "ServiceAccount",
-      "subject_name": "fox-admin",
-      "subject_namespace": "default"
+      "name": "cluster-admin",
+      "rules": [
+        {
+          "verbs": ["*"],
+          "resources": ["*"],
+          "api_groups": ["*"]
+        }
+      ]
     },
     {
-      "id": "RoleBinding:storefront:web-edit:ServiceAccount:web",
-      "binding_kind": "RoleBinding",
-      "binding_name": "web-edit",
+      "name": "edit",
+      "rules": [
+        {
+          "verbs": ["get", "list", "watch", "create", "update", "patch", "delete"],
+          "resources": ["deployments", "daemonsets", "statefulsets", "pods", "jobs", "cronjobs"],
+          "api_groups": ["apps", "batch", ""]
+        }
+      ]
+    }
+  ],
+  "roles": [
+    {
       "namespace": "storefront",
-      "role_kind": "ClusterRole",
-      "role_name": "edit",
-      "subject_kind": "ServiceAccount",
-      "subject_name": "web",
-      "subject_namespace": "storefront"
+      "name": "view",
+      "rules": [
+        {
+          "verbs": ["get", "list", "watch"],
+          "resources": ["pods", "services", "configmaps"],
+          "api_groups": [""]
+        }
+      ]
+    }
+  ],
+  "cluster_role_bindings": [
+    {
+      "name": "harrierops-kube-lab-cluster-admin",
+      "role_ref": {
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "fox-admin",
+          "namespace": "default"
+        }
+      ]
+    }
+  ],
+  "role_bindings": [
+    {
+      "namespace": "storefront",
+      "name": "web-edit",
+      "role_ref": {
+        "kind": "ClusterRole",
+        "name": "edit"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "web",
+          "namespace": "storefront"
+        }
+      ]
     },
     {
-      "id": "RoleBinding:storefront:view-only:User:analyst@example.com",
-      "binding_kind": "RoleBinding",
-      "binding_name": "view-only",
       "namespace": "storefront",
-      "role_kind": "Role",
-      "role_name": "view",
-      "subject_kind": "User",
-      "subject_name": "analyst@example.com",
-      "subject_namespace": null
+      "name": "view-only",
+      "role_ref": {
+        "kind": "Role",
+        "name": "view"
+      },
+      "subjects": [
+        {
+          "kind": "User",
+          "name": "analyst@example.com"
+        }
+      ]
     }
   ],
   "issues": []

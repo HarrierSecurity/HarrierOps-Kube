@@ -1,47 +1,85 @@
 {
   "issues": [],
   "metadata": {
+    "cluster_name": null,
     "command": "rbac",
     "context_name": "lab-cluster",
-    "cluster_name": null,
-    "namespace": "default",
     "docker_context": "default",
-    "generated_at": "2026-04-07T02:06:48Z",
+    "generated_at": "2026-04-07T23:34:08Z",
+    "namespace": "default",
     "schema_version": "1.0.0"
   },
   "role_grants": [
     {
       "binding_kind": "ClusterRoleBinding",
       "binding_name": "harrierops-kube-lab-cluster-admin",
+      "built_in": true,
+      "dangerous_rights": [
+        "admin-like wildcard access"
+      ],
+      "evidence_status": "direct",
       "id": "ClusterRoleBinding:_cluster:harrierops-kube-lab-cluster-admin:ServiceAccount:fox-admin",
       "namespace": null,
+      "priority": "high",
+      "related_workloads": [
+        "default/fox-admin"
+      ],
+      "role_display_name": "cluster-admin*",
       "role_kind": "ClusterRole",
       "role_name": "cluster-admin",
+      "scope": "cluster-wide",
+      "subject_display": "ServiceAccount default/fox-admin",
       "subject_kind": "ServiceAccount",
       "subject_name": "fox-admin",
-      "subject_namespace": "default"
+      "subject_namespace": "default",
+      "why_care": "cluster-wide grant stands out because of admin-like wildcard access, cluster-wide scope, used by 1 visible workload, attached to risky workload context.",
+      "workload_count": 1
     },
     {
       "binding_kind": "RoleBinding",
       "binding_name": "web-edit",
+      "built_in": true,
+      "dangerous_rights": [
+        "change workloads"
+      ],
+      "evidence_status": "direct",
       "id": "RoleBinding:storefront:web-edit:ServiceAccount:web",
       "namespace": "storefront",
+      "priority": "medium",
+      "related_workloads": [
+        "storefront/web-5d4f6"
+      ],
+      "role_display_name": "edit*",
       "role_kind": "ClusterRole",
       "role_name": "edit",
+      "scope": "namespace/storefront",
+      "subject_display": "ServiceAccount storefront/web",
       "subject_kind": "ServiceAccount",
       "subject_name": "web",
-      "subject_namespace": "storefront"
+      "subject_namespace": "storefront",
+      "why_care": "namespace/storefront grant stands out because of change workloads, used by 1 visible workload.",
+      "workload_count": 1
     },
     {
       "binding_kind": "RoleBinding",
       "binding_name": "view-only",
+      "built_in": true,
+      "dangerous_rights": [],
+      "evidence_status": "direct",
       "id": "RoleBinding:storefront:view-only:User:analyst@example.com",
       "namespace": "storefront",
+      "priority": "low",
+      "related_workloads": [],
+      "role_display_name": "view*",
       "role_kind": "Role",
       "role_name": "view",
+      "scope": "namespace/storefront",
+      "subject_display": "User analyst@example.com",
       "subject_kind": "User",
       "subject_name": "analyst@example.com",
-      "subject_namespace": null
+      "subject_namespace": null,
+      "why_care": "namespace/storefront grant looks narrower, but it still grounds who is bound to what access.",
+      "workload_count": 0
     }
   ]
 }

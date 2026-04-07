@@ -1,47 +1,39 @@
 {
   "issues": [],
   "metadata": {
+    "cluster_name": null,
     "command": "rbac",
     "context_name": "lab-cluster",
-    "cluster_name": null,
-    "namespace": "default",
     "docker_context": "default",
-    "generated_at": "2026-04-07T02:06:48Z",
+    "generated_at": "2026-04-07T23:34:08Z",
+    "namespace": "default",
     "schema_version": "1.0.0"
   },
   "role_grants": [
     {
       "binding_kind": "ClusterRoleBinding",
       "binding_name": "harrierops-kube-lab-cluster-admin",
+      "built_in": true,
+      "dangerous_rights": [
+        "admin-like wildcard access"
+      ],
+      "evidence_status": "direct",
       "id": "ClusterRoleBinding:_cluster:harrierops-kube-lab-cluster-admin:ServiceAccount:fox-admin",
       "namespace": null,
+      "priority": "high",
+      "related_workloads": [
+        "default/fox-admin"
+      ],
+      "role_display_name": "cluster-admin*",
       "role_kind": "ClusterRole",
       "role_name": "cluster-admin",
+      "scope": "cluster-wide",
+      "subject_display": "ServiceAccount default/fox-admin",
       "subject_kind": "ServiceAccount",
       "subject_name": "fox-admin",
-      "subject_namespace": "default"
-    },
-    {
-      "binding_kind": "RoleBinding",
-      "binding_name": "web-edit",
-      "id": "RoleBinding:storefront:web-edit:ServiceAccount:web",
-      "namespace": "storefront",
-      "role_kind": "ClusterRole",
-      "role_name": "edit",
-      "subject_kind": "ServiceAccount",
-      "subject_name": "web",
-      "subject_namespace": "storefront"
-    },
-    {
-      "binding_kind": "RoleBinding",
-      "binding_name": "view-only",
-      "id": "RoleBinding:storefront:view-only:User:analyst@example.com",
-      "namespace": "storefront",
-      "role_kind": "Role",
-      "role_name": "view",
-      "subject_kind": "User",
-      "subject_name": "analyst@example.com",
-      "subject_namespace": null
+      "subject_namespace": "default",
+      "why_care": "cluster-wide grant stands out because of admin-like wildcard access, cluster-wide scope, used by 1 visible workload, attached to risky workload context.",
+      "workload_count": 1
     }
   ]
 }

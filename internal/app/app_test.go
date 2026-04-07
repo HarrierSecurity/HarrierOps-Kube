@@ -449,6 +449,98 @@ func TestInventoryNextCommandsIncludesRBACWhenGrantsAreVisible(t *testing.T) {
 	}
 }
 
+func TestRbacPayloadRanksClusterWideAdminPathFirst(t *testing.T) {
+	payload, err := buildCommandPayload("rbac", Options{FixtureDir: testFixtureDir(t)})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	grants, ok := payload["role_grants"].([]any)
+	if !ok || len(grants) == 0 {
+		t.Fatalf("role_grants = %T, want non-empty []any", payload["role_grants"])
+	}
+
+	first := requireMap(t, grants[0])
+	if first["subject_display"] != "ServiceAccount default/fox-admin" {
+		t.Fatalf("first subject_display = %v, want ServiceAccount default/fox-admin", first["subject_display"])
+	}
+	if first["priority"] != "high" {
+		t.Fatalf("first priority = %v, want high", first["priority"])
+	}
+	if first["role_display_name"] != "cluster-admin*" {
+		t.Fatalf("first role_display_name = %v, want cluster-admin*", first["role_display_name"])
+	}
+}
+
+func TestRbacPayloadMarksImpersonationSignals(t *testing.T) {
+	payload, err := buildCommandPayload("rbac", Options{FixtureDir: rbacFixtureCaseDir(t, "impersonate")})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	grants := payload["role_grants"].([]any)
+	first := requireMap(t, grants[0])
+	rights, ok := first["dangerous_rights"].([]any)
+	if !ok {
+		t.Fatalf("dangerous_rights = %T, want []any", first["dangerous_rights"])
+	}
+	found := false
+	for _, item := range rights {
+		if item == "impersonate serviceaccounts" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("dangerous_rights = %#v, want impersonate serviceaccounts", rights)
+	}
+}
+
+func TestRbacKeepsGrantVisibleWhenRoleRulesAreBlocked(t *testing.T) {
+	payload, err := buildCommandPayload("rbac", Options{FixtureDir: rbacFixtureCaseDir(t, "partial_read")})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	grants := payload["role_grants"].([]any)
+	first := requireMap(t, grants[0])
+	if first["evidence_status"] != "visibility blocked" {
+		t.Fatalf("evidence_status = %v, want visibility blocked", first["evidence_status"])
+	}
+
+	issues, ok := payload["issues"].([]any)
+	if !ok || len(issues) == 0 {
+		t.Fatalf("issues = %T, want non-empty []any", payload["issues"])
+	}
+}
+
+func TestRbacTableOutputStaysOperatorReadable(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"rbac"}, stdout, stderr, []string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir})
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"priority",
+		"scope",
+		"subject",
+		"role",
+		"signal",
+		"why_care",
+		"cluster-admin*",
+		"ServiceAccount default/fox-admin",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
+	}
+}
+
 func testFixtureDir(t *testing.T) string {
 	t.Helper()
 	return absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "lab_cluster"))
@@ -462,6 +554,11 @@ func testGoldenDir(t *testing.T) string {
 func whoamiFixtureCaseDir(t *testing.T, name string) string {
 	t.Helper()
 	return absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "whoami_cases", name))
+}
+
+func rbacFixtureCaseDir(t *testing.T, name string) string {
+	t.Helper()
+	return absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "rbac_cases", name))
 }
 
 func absPath(t *testing.T, path string) string {

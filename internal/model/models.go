@@ -112,15 +112,25 @@ type NextCommandHint struct {
 }
 
 type RBACGrant struct {
-	ID               string  `json:"id"`
-	BindingKind      string  `json:"binding_kind"`
-	BindingName      string  `json:"binding_name"`
-	Namespace        *string `json:"namespace"`
-	RoleKind         string  `json:"role_kind"`
-	RoleName         string  `json:"role_name"`
-	SubjectKind      string  `json:"subject_kind"`
-	SubjectName      string  `json:"subject_name"`
-	SubjectNamespace *string `json:"subject_namespace"`
+	ID               string   `json:"id"`
+	BindingKind      string   `json:"binding_kind"`
+	BindingName      string   `json:"binding_name"`
+	Namespace        *string  `json:"namespace"`
+	Scope            string   `json:"scope"`
+	RoleKind         string   `json:"role_kind"`
+	RoleName         string   `json:"role_name"`
+	RoleDisplayName  string   `json:"role_display_name"`
+	BuiltIn          bool     `json:"built_in"`
+	SubjectKind      string   `json:"subject_kind"`
+	SubjectName      string   `json:"subject_name"`
+	SubjectNamespace *string  `json:"subject_namespace"`
+	SubjectDisplay   string   `json:"subject_display"`
+	DangerousRights  []string `json:"dangerous_rights"`
+	RelatedWorkloads []string `json:"related_workloads"`
+	WorkloadCount    int      `json:"workload_count"`
+	EvidenceStatus   string   `json:"evidence_status"`
+	Priority         string   `json:"priority"`
+	WhyCare          string   `json:"why_care"`
 }
 
 type RBACData struct {

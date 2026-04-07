@@ -1,0 +1,26 @@
+{
+  "cluster_roles": [
+    {
+      "name": "cluster-admin",
+      "rules_visible": false,
+      "rules": []
+    }
+  ],
+  "cluster_role_bindings": [
+    {
+      "name": "blocked-cluster-admin",
+      "role_ref": {
+        "kind": "ClusterRole",
+        "name": "cluster-admin"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "blocked-admin",
+          "namespace": "default"
+        }
+      ]
+    }
+  ],
+  "issues": []
+}

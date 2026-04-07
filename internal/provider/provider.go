@@ -95,11 +95,11 @@ func (p fixtureProvider) Inventory(options QueryOptions) (model.InventoryData, e
 }
 
 func (p fixtureProvider) RBACBindings(options QueryOptions) (model.RBACData, error) {
-	var data model.RBACData
-	if err := p.load("rbac", &data); err != nil {
+	var raw rawRBACFixture
+	if err := p.load("rbac", &raw); err != nil {
 		return model.RBACData{}, err
 	}
-	return data, nil
+	return normalizeRBACFixture(raw), nil
 }
 
 func (p fixtureProvider) ServiceAccounts(options QueryOptions) (model.ServiceAccountsData, error) {

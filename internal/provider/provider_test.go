@@ -127,11 +127,53 @@ func TestRBACBindingsDecodeNormalizedGrantRows(t *testing.T) {
 	}
 
 	first := data.RoleGrants[0]
-	if first.RoleName != "cluster-admin" {
-		t.Fatalf("RoleName = %q, want cluster-admin", first.RoleName)
+	if first.RoleDisplayName != "cluster-admin*" {
+		t.Fatalf("RoleDisplayName = %q, want cluster-admin*", first.RoleDisplayName)
 	}
-	if first.SubjectName != "fox-admin" {
-		t.Fatalf("SubjectName = %q, want fox-admin", first.SubjectName)
+	if first.Scope != "cluster-wide" {
+		t.Fatalf("Scope = %q, want cluster-wide", first.Scope)
+	}
+	if len(first.DangerousRights) == 0 || first.DangerousRights[0] != "admin-like wildcard access" {
+		t.Fatalf("DangerousRights = %#v, want admin-like wildcard access first", first.DangerousRights)
+	}
+}
+
+func TestRBACBindingsLiftImpersonateSignals(t *testing.T) {
+	provider, err := NewFixtureProvider(absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "rbac_cases", "impersonate")))
+	if err != nil {
+		t.Fatalf("NewFixtureProvider() error = %v", err)
+	}
+
+	data, err := provider.RBACBindings(QueryOptions{})
+	if err != nil {
+		t.Fatalf("RBACBindings() error = %v", err)
+	}
+	if len(data.RoleGrants) != 1 {
+		t.Fatalf("len(RoleGrants) = %d, want 1", len(data.RoleGrants))
+	}
+	if !containsString(data.RoleGrants[0].DangerousRights, "impersonate serviceaccounts") {
+		t.Fatalf("DangerousRights = %#v, want impersonate serviceaccounts", data.RoleGrants[0].DangerousRights)
+	}
+}
+
+func TestRBACBindingsKeepVisibleGrantWhenRoleRulesAreBlocked(t *testing.T) {
+	provider, err := NewFixtureProvider(absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "rbac_cases", "partial_read")))
+	if err != nil {
+		t.Fatalf("NewFixtureProvider() error = %v", err)
+	}
+
+	data, err := provider.RBACBindings(QueryOptions{})
+	if err != nil {
+		t.Fatalf("RBACBindings() error = %v", err)
+	}
+	if len(data.RoleGrants) != 1 {
+		t.Fatalf("len(RoleGrants) = %d, want 1", len(data.RoleGrants))
+	}
+	if data.RoleGrants[0].EvidenceStatus != "visibility blocked" {
+		t.Fatalf("EvidenceStatus = %q, want visibility blocked", data.RoleGrants[0].EvidenceStatus)
+	}
+	if len(data.Issues) == 0 {
+		t.Fatalf("expected partial-read issue to be surfaced")
 	}
 }
 
@@ -170,4 +212,13 @@ func absPath(t *testing.T, path string) string {
 		t.Fatalf("filepath.Abs(): %v", err)
 	}
 	return absolute
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
