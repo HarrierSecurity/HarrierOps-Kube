@@ -1,4 +1,41 @@
 {
+  "findings": [
+    {
+      "description": "Ingress 'web-ing' appears externally reachable via Ingress.",
+      "id": "exposure-public-ingress:storefront:web-ing",
+      "related_ids": ["ingress:storefront:web-ing"],
+      "severity": "high",
+      "title": "Internet-reachable Kubernetes exposure"
+    },
+    {
+      "description": "Service 'web-svc' appears externally reachable via LoadBalancer.",
+      "id": "exposure-public-service:storefront:web-svc",
+      "related_ids": ["service:storefront:web-svc"],
+      "severity": "high",
+      "title": "Internet-reachable Kubernetes exposure"
+    },
+    {
+      "description": "Service 'metrics' exposes a workload through NodePort.",
+      "id": "exposure-broad-service:kube-system:metrics",
+      "related_ids": ["service:kube-system:metrics"],
+      "severity": "medium",
+      "title": "Broad workload exposure path detected"
+    },
+    {
+      "description": "Pod 'ci-runner' exposes a workload through HostNetwork.",
+      "id": "exposure-broad-pod-hostnetwork:build:ci-runner",
+      "related_ids": ["pod-hostnetwork:build:ci-runner"],
+      "severity": "medium",
+      "title": "Broad workload exposure path detected"
+    },
+    {
+      "description": "Pod 'docker-builder' exposes a workload through HostPort.",
+      "id": "exposure-broad-pod-hostport:build:docker-builder",
+      "related_ids": ["pod-hostport:build:docker-builder"],
+      "severity": "medium",
+      "title": "Broad workload exposure path detected"
+    }
+  ],
   "exposure_assets": [
     {
       "id": "ingress:storefront:web-ing",

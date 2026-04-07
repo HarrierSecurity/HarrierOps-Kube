@@ -1,0 +1,38 @@
+{
+  "kube_context": {
+    "current_context": "prod-payments",
+    "cluster_name": "prod-payments",
+    "user": "",
+    "namespace": "payments",
+    "server": "https://10.20.30.40:6443",
+    "server_version": "v1.29.7"
+  },
+  "current_identity": {
+    "label": "system:serviceaccount:payments:api",
+    "kind": "ServiceAccount",
+    "namespace": "payments",
+    "confidence": "inferred"
+  },
+  "session": {
+    "auth_material_type": "service-account-token",
+    "execution_origin": "inside-pod",
+    "foothold_family": "workload",
+    "visibility_scope": "namespace-scoped"
+  },
+  "environment_hint": {
+    "type": "self-managed-like",
+    "confidence": "heuristic",
+    "summary": "The visible API endpoint looks private or lab-shaped rather than strongly managed-service-branded.",
+    "evidence": [
+      "The visible API endpoint is an internal-style address without strong managed-cluster branding."
+    ]
+  },
+  "identity_evidence": [
+    "Mounted service account clues point to namespace 'payments' and account 'api'.",
+    "The active session looks like an in-cluster service account token flow."
+  ],
+  "visibility_blockers": [
+    "Current scope does not allow a stronger self-identity confirmation call."
+  ],
+  "issues": []
+}

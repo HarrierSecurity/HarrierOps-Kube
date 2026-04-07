@@ -1,0 +1,26 @@
+Visibility                    Current scope shows 4 namespaces, 3 nodes, and 9 visible workload objects, so this reads like a broad cluster orientation pass.
+Visibility Scope              broad cluster slice
+Visibility Assessment         broad
+Environment                   The visible API endpoint looks private or lab-shaped rather than strongly managed-service-branded.
+Environment Type              self-managed-like
+Environment Confidence        heuristic
+Environment Evidence          The visible API endpoint is an internal-style address without strong managed-cluster branding.
+Exposure Footprint            3 public-looking exposure paths are visible, so `exposure` should likely be the next stop.
+Public Paths                  3
+Ingresses                     1
+LoadBalancers                 1
+NodePorts                     1
+Host Exposure Pods            2
+Risky Workloads               1 privileged and 2 host-touching workload clue(s) are visible, so `workloads` should help quickly.
+Privileged Workloads          1
+Host-Touching Workloads       2
+Host Namespace Workloads      1
+Docker Socket Workloads       1
+Identity Footprint            3 service accounts, 3 visible role grants, and 2 higher-impact service-account path(s) are visible.
+Service Accounts              3
+Role Grants                   3
+Cluster-Wide Grants           1
+High-Impact Service Accounts  2
+Next Commands                 exposure: 3 public-looking exposure path(s) are visible, so the cluster edge deserves review first.; workloads: 2 visible workload(s) already carry privileged or host-touching clues.; service-accounts: Visible service-account use and RBAC grants suggest identity paths are already worth triaging.; rbac: Visible role grants are already on screen, so `rbac` can ground the assignment evidence directly.
+Kubernetes Counts             configmaps=4, daemonsets=1, deployments=2, ingresses=1, namespaces=4, nodes=3, pods=5, secrets=6, services=3, statefulsets=1
+Docker Counts                 containers=3, images=4, networks=2, volumes=1

@@ -3,6 +3,13 @@
 Harrier Ops Kube is a Go-first, `kubectl`-first CLI scaffold for offensive-focused Kubernetes
 recon and chaining.
 
+It is part of the HarrierOps tool family:
+
+- Harrier Ops Kube
+- Harrier Ops Azure
+- Harrier Ops AWS
+- Harrier Ops GCP
+
 It is being shaped as a sibling project to AzureFox: flat commands, deterministic output
 contracts, artifact emission for every run, and operator-readable output that stays inside the recon
 boundary.
@@ -135,7 +142,17 @@ All commands write artifacts under `<outdir>/`:
 ```bash
 gofmt -w ./cmd ./internal
 go test ./...
+bash scripts/setup_local_guardrails.sh
 ```
+
+## GitHub Guardrails
+
+The repo now mirrors the AzureFox-style lightweight publish guardrails:
+
+- local pre-push hook for branch naming, direct `main` push blocking, formatting checks, tests, and optional `gitleaks`
+- CI checks for PR metadata policy, `gitleaks`, formatting, and `go test ./...`
+- Dependabot for GitHub Actions and Go modules
+- PR template plus contributor and security guidance
 
 ## Phase 1 Direction
 

@@ -3,11 +3,16 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"harrierops-kube/internal/model"
+	"harrierops-kube/internal/output"
+	"harrierops-kube/internal/provider"
 )
 
 func TestCLICommandsSmoke(t *testing.T) {
@@ -102,9 +107,10 @@ func TestUsageTextReflectsCurrentSurface(t *testing.T) {
 		t.Fatalf("usage text still references all-checks: %q", usage)
 	}
 	for _, want := range []string{
-		"implemented commands: exposure, inventory, rbac, service-accounts, whoami, workloads",
-		"planned phase 1 commands: permissions, privesc, secrets",
+		"implemented commands: whoami, inventory, rbac, service-accounts, workloads, exposure",
+		"planned phase 1 commands: permissions, secrets, privesc",
 		"later depth surfaces: images",
+		"implemented sections: identity, core, workload, exposure",
 	} {
 		if !strings.Contains(usage, want) {
 			t.Fatalf("usage text missing %q in %q", want, usage)
@@ -144,6 +150,305 @@ func TestGoldenOutputsForImplementedCommands(t *testing.T) {
 	}
 }
 
+func TestWhoAmIPayloadIdentityCases(t *testing.T) {
+	testCases := []struct {
+		name                string
+		fixtureDir          string
+		wantLabel           string
+		wantConfidence      string
+		wantAuthMaterial    string
+		wantExecutionOrigin string
+		wantEnvironmentType string
+		wantBlockers        int
+	}{
+		{
+			name:                "direct",
+			fixtureDir:          testFixtureDir(t),
+			wantLabel:           "fox-operator",
+			wantConfidence:      "direct",
+			wantAuthMaterial:    "exec-plugin",
+			wantExecutionOrigin: "outside-cluster",
+			wantEnvironmentType: "self-managed-like",
+			wantBlockers:        0,
+		},
+		{
+			name:                "inferred",
+			fixtureDir:          whoamiFixtureCaseDir(t, "inferred"),
+			wantLabel:           "system:serviceaccount:payments:api",
+			wantConfidence:      "inferred",
+			wantAuthMaterial:    "service-account-token",
+			wantExecutionOrigin: "inside-pod",
+			wantEnvironmentType: "self-managed-like",
+			wantBlockers:        1,
+		},
+		{
+			name:                "blocked",
+			fixtureDir:          whoamiFixtureCaseDir(t, "blocked"),
+			wantLabel:           "unknown current identity",
+			wantConfidence:      "blocked",
+			wantAuthMaterial:    "unknown",
+			wantExecutionOrigin: "outside-cluster",
+			wantEnvironmentType: "self-managed-like",
+			wantBlockers:        2,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := buildCommandPayload("whoami", Options{FixtureDir: tc.fixtureDir})
+			if err != nil {
+				t.Fatalf("buildCommandPayload() error = %v", err)
+			}
+
+			currentIdentity := requireMap(t, payload["current_identity"])
+			if currentIdentity["label"] != tc.wantLabel {
+				t.Fatalf("current_identity.label = %v, want %s", currentIdentity["label"], tc.wantLabel)
+			}
+			if currentIdentity["confidence"] != tc.wantConfidence {
+				t.Fatalf("current_identity.confidence = %v, want %s", currentIdentity["confidence"], tc.wantConfidence)
+			}
+
+			session := requireMap(t, payload["session"])
+			if session["auth_material_type"] != tc.wantAuthMaterial {
+				t.Fatalf("session.auth_material_type = %v, want %s", session["auth_material_type"], tc.wantAuthMaterial)
+			}
+			if session["execution_origin"] != tc.wantExecutionOrigin {
+				t.Fatalf("session.execution_origin = %v, want %s", session["execution_origin"], tc.wantExecutionOrigin)
+			}
+
+			environmentHint := requireMap(t, payload["environment_hint"])
+			if environmentHint["type"] != tc.wantEnvironmentType {
+				t.Fatalf("environment_hint.type = %v, want %s", environmentHint["type"], tc.wantEnvironmentType)
+			}
+
+			blockers, ok := payload["visibility_blockers"].([]any)
+			if !ok {
+				t.Fatalf("visibility_blockers = %T, want []any", payload["visibility_blockers"])
+			}
+			if len(blockers) != tc.wantBlockers {
+				t.Fatalf("len(visibility_blockers) = %d, want %d", len(blockers), tc.wantBlockers)
+			}
+		})
+	}
+}
+
+func TestWhoAmITableOutputStaysOperatorReadable(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"whoami"}, stdout, stderr, []string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir})
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"Cluster",
+		"API Server",
+		"Identity",
+		"Identity Confidence",
+		"Foothold Family",
+		"Environment Hint",
+		"Auth Material",
+		"Identity Evidence",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestInventoryOutputStaysOrientationOnly(t *testing.T) {
+	payload, err := buildCommandPayload("inventory", Options{FixtureDir: testFixtureDir(t)})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	for _, key := range []string{
+		"visibility",
+		"environment",
+		"exposure_footprint",
+		"risky_workload_footprint",
+		"identity_footprint",
+		"next_commands",
+	} {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("inventory payload missing %q", key)
+		}
+	}
+
+	for _, forbidden := range []string{"role_grants", "service_accounts", "workload_assets", "exposure_assets"} {
+		if _, ok := payload[forbidden]; ok {
+			t.Fatalf("inventory payload should stay orientation-only, but included %q", forbidden)
+		}
+	}
+}
+
+func TestInventoryTableOutputHighlightsRouting(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"inventory"}, stdout, stderr, []string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir})
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"Visibility",
+		"Environment",
+		"Exposure Footprint",
+		"Risky Workloads",
+		"Identity Footprint",
+		"Next Commands",
+		"exposure:",
+		"rbac:",
+		"workloads:",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestInventoryKeepsOrientationSignalWhenSupportReadFails(t *testing.T) {
+	payload, err := buildInventoryPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			Namespace:   "default",
+		},
+		inventoryData: model.InventoryData{
+			KubernetesCounts: map[string]int{"namespaces": 2, "pods": 3},
+			Issues:           []model.Issue{},
+		},
+		whoamiData: model.WhoAmIData{
+			KubeContext: model.KubeContext{
+				ClusterName:    "lab-cluster",
+				CurrentContext: "lab-cluster",
+				Namespace:      "default",
+				Server:         "https://10.0.0.1:6443",
+			},
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "fox-operator",
+				Kind:       "User",
+				Confidence: "direct",
+			},
+			Session: model.SessionProfile{
+				AuthMaterialType: "exec-plugin",
+				ExecutionOrigin:  "outside-cluster",
+				FootholdFamily:   "cloud-bridged",
+				VisibilityScope:  "cluster-scoped",
+			},
+		},
+		workloadsErr: errors.New("forbidden"),
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildInventoryPayload() error = %v", err)
+	}
+
+	issues, ok := payload["issues"].([]any)
+	if !ok {
+		t.Fatalf("issues = %T, want []any", payload["issues"])
+	}
+	if len(issues) == 0 {
+		t.Fatalf("expected propagated inventory issue")
+	}
+
+	found := false
+	for _, item := range issues {
+		issue := requireMap(t, item)
+		if issue["scope"] == "inventory.workloads" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("inventory issues did not include workload collection failure: %#v", issues)
+	}
+
+	if _, ok := payload["visibility"]; !ok {
+		t.Fatalf("inventory lost orientation signal after support read failure")
+	}
+}
+
+func TestInventoryLootIsSmallerThanFullJSON(t *testing.T) {
+	payload, err := buildCommandPayload("inventory", Options{FixtureDir: testFixtureDir(t)})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	lootJSON, fullJSON, err := outputArtifactsForTest("inventory", payload)
+	if err != nil {
+		t.Fatalf("outputArtifactsForTest() error = %v", err)
+	}
+
+	if len(lootJSON) >= len(fullJSON) {
+		t.Fatalf("loot payload should be smaller than full JSON: loot=%d full=%d", len(lootJSON), len(fullJSON))
+	}
+
+	var lootPayload map[string]any
+	if err := json.Unmarshal(lootJSON, &lootPayload); err != nil {
+		t.Fatalf("json.Unmarshal() loot error = %v", err)
+	}
+	if _, ok := lootPayload["kubernetes_counts"]; ok {
+		t.Fatalf("inventory loot should omit full counts")
+	}
+	if _, ok := lootPayload["next_commands"]; !ok {
+		t.Fatalf("inventory loot should keep next_commands")
+	}
+}
+
+func TestInventoryVisibilityKeepsBlockersVisibleInBroadSlice(t *testing.T) {
+	visibility := deriveInventoryVisibility(
+		map[string]int{
+			"namespaces":   4,
+			"nodes":        2,
+			"pods":         8,
+			"deployments":  2,
+			"daemonsets":   1,
+			"statefulsets": 1,
+		},
+		model.WhoAmIData{
+			VisibilityBlockers: []string{
+				"Current scope does not confirm every namespace or object family cleanly.",
+			},
+		},
+	)
+
+	if !strings.Contains(visibility.Summary, "Visibility blockers are still present") {
+		t.Fatalf("visibility summary should keep blockers visible, got %q", visibility.Summary)
+	}
+}
+
+func TestInventoryNextCommandsIncludesRBACWhenGrantsAreVisible(t *testing.T) {
+	hints := deriveInventoryNextCommands(
+		model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{Confidence: "direct"},
+		},
+		model.ExposureData{},
+		model.WorkloadsData{},
+		model.ServiceAccountsData{},
+		model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{ID: "grant-1"},
+			},
+		},
+	)
+
+	found := false
+	for _, hint := range hints {
+		if hint.Command == "rbac" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected inventory next commands to include rbac when grants are visible")
+	}
+}
+
 func testFixtureDir(t *testing.T) string {
 	t.Helper()
 	return absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "lab_cluster"))
@@ -152,6 +457,11 @@ func testFixtureDir(t *testing.T) string {
 func testGoldenDir(t *testing.T) string {
 	t.Helper()
 	return absPath(t, filepath.Join("..", "..", "testdata", "golden"))
+}
+
+func whoamiFixtureCaseDir(t *testing.T, name string) string {
+	t.Helper()
+	return absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "whoami_cases", name))
 }
 
 func absPath(t *testing.T, path string) string {
@@ -192,4 +502,71 @@ func normalizeGeneratedAt(t *testing.T, payload map[string]any) map[string]any {
 	metadata := requireMap(t, normalized["metadata"])
 	metadata["generated_at"] = "<generated_at>"
 	return normalized
+}
+
+type stubInventoryProvider struct {
+	metadataContext     model.MetadataContext
+	metadataContextErr  error
+	inventoryData       model.InventoryData
+	inventoryErr        error
+	whoamiData          model.WhoAmIData
+	whoamiErr           error
+	rbacData            model.RBACData
+	rbacErr             error
+	serviceAccountsData model.ServiceAccountsData
+	serviceAccountsErr  error
+	workloadsData       model.WorkloadsData
+	workloadsErr        error
+	exposuresData       model.ExposureData
+	exposuresErr        error
+}
+
+func (s stubInventoryProvider) MetadataContext(provider.QueryOptions) (model.MetadataContext, error) {
+	return s.metadataContext, s.metadataContextErr
+}
+
+func (s stubInventoryProvider) WhoAmI(provider.QueryOptions) (model.WhoAmIData, error) {
+	return s.whoamiData, s.whoamiErr
+}
+
+func (s stubInventoryProvider) Inventory(provider.QueryOptions) (model.InventoryData, error) {
+	return s.inventoryData, s.inventoryErr
+}
+
+func (s stubInventoryProvider) RBACBindings(provider.QueryOptions) (model.RBACData, error) {
+	return s.rbacData, s.rbacErr
+}
+
+func (s stubInventoryProvider) ServiceAccounts(provider.QueryOptions) (model.ServiceAccountsData, error) {
+	return s.serviceAccountsData, s.serviceAccountsErr
+}
+
+func (s stubInventoryProvider) Workloads(provider.QueryOptions) (model.WorkloadsData, error) {
+	return s.workloadsData, s.workloadsErr
+}
+
+func (s stubInventoryProvider) Exposures(provider.QueryOptions) (model.ExposureData, error) {
+	return s.exposuresData, s.exposuresErr
+}
+
+func outputArtifactsForTest(command string, payload map[string]any) ([]byte, []byte, error) {
+	tmpDir, err := os.MkdirTemp("", "harrierops-loot-test")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	paths, err := output.WriteArtifacts(command, payload, tmpDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	lootBytes, err := os.ReadFile(paths["loot"])
+	if err != nil {
+		return nil, nil, err
+	}
+	jsonBytes, err := os.ReadFile(paths["json"])
+	if err != nil {
+		return nil, nil, err
+	}
+	return lootBytes, jsonBytes, nil
 }

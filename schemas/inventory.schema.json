@@ -1,4 +1,4 @@
 {
   "model": "InventoryOutput",
-  "top_level_fields": ["metadata", "kubernetes_counts", "docker_counts", "issues"]
+  "top_level_fields": ["metadata", "visibility", "environment", "exposure_footprint", "risky_workload_footprint", "identity_footprint", "next_commands", "kubernetes_counts", "docker_counts", "issues"]
 }

@@ -46,7 +46,7 @@
     "command": "inventory",
     "context_name": "lab-cluster",
     "docker_context": "default",
-    "generated_at": "<generated_at>",
+    "generated_at": "2026-04-07T23:14:44Z",
     "namespace": "default",
     "schema_version": "1.0.0"
   },

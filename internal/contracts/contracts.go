@@ -22,11 +22,11 @@ type CommandContract struct {
 var commandContracts = map[string]CommandContract{
 	"whoami": {
 		Model:          "WhoAmIOutput",
-		TopLevelFields: []string{"metadata", "kube_context", "docker", "issues"},
+		TopLevelFields: []string{"metadata", "kube_context", "current_identity", "session", "environment_hint", "identity_evidence", "visibility_blockers", "issues"},
 	},
 	"inventory": {
 		Model:          "InventoryOutput",
-		TopLevelFields: []string{"metadata", "kubernetes_counts", "docker_counts", "issues"},
+		TopLevelFields: []string{"metadata", "visibility", "environment", "exposure_footprint", "risky_workload_footprint", "identity_footprint", "next_commands", "kubernetes_counts", "docker_counts", "issues"},
 	},
 	"rbac": {
 		Model:          "RbacOutput",

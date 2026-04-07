@@ -1,10 +1,4 @@
 {
-  "docker_counts": {
-    "containers": 3,
-    "images": 4,
-    "networks": 2,
-    "volumes": 1
-  },
   "environment": {
     "confidence": "heuristic",
     "evidence": [
@@ -29,24 +23,12 @@
     "summary": "3 service accounts, 3 visible role grants, and 2 higher-impact service-account path(s) are visible."
   },
   "issues": [],
-  "kubernetes_counts": {
-    "configmaps": 4,
-    "daemonsets": 1,
-    "deployments": 2,
-    "ingresses": 1,
-    "namespaces": 4,
-    "nodes": 3,
-    "pods": 5,
-    "secrets": 6,
-    "services": 3,
-    "statefulsets": 1
-  },
   "metadata": {
     "cluster_name": null,
     "command": "inventory",
     "context_name": "lab-cluster",
     "docker_context": "default",
-    "generated_at": "<generated_at>",
+    "generated_at": "2026-04-07T23:14:44Z",
     "namespace": "default",
     "schema_version": "1.0.0"
   },

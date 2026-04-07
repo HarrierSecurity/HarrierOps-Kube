@@ -32,21 +32,83 @@ type KubeContext struct {
 	ServerVersion  string `json:"server_version"`
 }
 
+type CurrentIdentity struct {
+	Label      string  `json:"label"`
+	Kind       string  `json:"kind"`
+	Namespace  *string `json:"namespace,omitempty"`
+	Confidence string  `json:"confidence"`
+}
+
+type SessionProfile struct {
+	AuthMaterialType string `json:"auth_material_type"`
+	ExecutionOrigin  string `json:"execution_origin"`
+	FootholdFamily   string `json:"foothold_family"`
+	VisibilityScope  string `json:"visibility_scope"`
+}
+
 type DockerSession struct {
 	Available   bool   `json:"available"`
 	ContextName string `json:"context_name"`
 }
 
 type WhoAmIData struct {
-	KubeContext KubeContext    `json:"kube_context"`
-	Docker      *DockerSession `json:"docker,omitempty"`
-	Issues      []Issue        `json:"issues"`
+	KubeContext        KubeContext        `json:"kube_context"`
+	CurrentIdentity    CurrentIdentity    `json:"current_identity"`
+	Session            SessionProfile     `json:"session"`
+	EnvironmentHint    EnvironmentSummary `json:"environment_hint"`
+	IdentityEvidence   []string           `json:"identity_evidence"`
+	VisibilityBlockers []string           `json:"visibility_blockers"`
+	Docker             *DockerSession     `json:"docker,omitempty"`
+	Issues             []Issue            `json:"issues"`
 }
 
 type InventoryData struct {
 	KubernetesCounts map[string]int `json:"kubernetes_counts"`
 	DockerCounts     map[string]int `json:"docker_counts,omitempty"`
 	Issues           []Issue        `json:"issues"`
+}
+
+type VisibilitySummary struct {
+	Scope      string `json:"scope"`
+	Assessment string `json:"assessment"`
+	Summary    string `json:"summary"`
+}
+
+type EnvironmentSummary struct {
+	Type       string   `json:"type"`
+	Confidence string   `json:"confidence"`
+	Summary    string   `json:"summary"`
+	Evidence   []string `json:"evidence"`
+}
+
+type ExposureFootprint struct {
+	PublicPaths      int    `json:"public_paths"`
+	Ingresses        int    `json:"ingresses"`
+	LoadBalancers    int    `json:"load_balancers"`
+	NodePorts        int    `json:"node_ports"`
+	HostExposurePods int    `json:"host_exposure_pods"`
+	Summary          string `json:"summary"`
+}
+
+type RiskyWorkloadFootprint struct {
+	PrivilegedWorkloads    int    `json:"privileged_workloads"`
+	HostTouchingWorkloads  int    `json:"host_touching_workloads"`
+	HostNamespaceWorkloads int    `json:"host_namespace_workloads"`
+	DockerSocketWorkloads  int    `json:"docker_socket_workloads"`
+	Summary                string `json:"summary"`
+}
+
+type IdentityFootprint struct {
+	ServiceAccounts           int    `json:"service_accounts"`
+	RoleGrants                int    `json:"role_grants"`
+	ClusterWideRoleGrants     int    `json:"cluster_wide_role_grants"`
+	HighImpactServiceAccounts int    `json:"high_impact_service_accounts"`
+	Summary                   string `json:"summary"`
+}
+
+type NextCommandHint struct {
+	Command string `json:"command"`
+	Why     string `json:"why"`
 }
 
 type RBACGrant struct {
@@ -126,17 +188,27 @@ type ExposureData struct {
 }
 
 type WhoAmIOutput struct {
-	Metadata    contracts.Metadata `json:"metadata"`
-	KubeContext KubeContext        `json:"kube_context"`
-	Docker      *DockerSession     `json:"docker,omitempty"`
-	Issues      []Issue            `json:"issues"`
+	Metadata           contracts.Metadata `json:"metadata"`
+	KubeContext        KubeContext        `json:"kube_context"`
+	CurrentIdentity    CurrentIdentity    `json:"current_identity"`
+	Session            SessionProfile     `json:"session"`
+	EnvironmentHint    EnvironmentSummary `json:"environment_hint"`
+	IdentityEvidence   []string           `json:"identity_evidence"`
+	VisibilityBlockers []string           `json:"visibility_blockers"`
+	Issues             []Issue            `json:"issues"`
 }
 
 type InventoryOutput struct {
-	Metadata         contracts.Metadata `json:"metadata"`
-	KubernetesCounts map[string]int     `json:"kubernetes_counts"`
-	DockerCounts     map[string]int     `json:"docker_counts,omitempty"`
-	Issues           []Issue            `json:"issues"`
+	Metadata               contracts.Metadata     `json:"metadata"`
+	Visibility             VisibilitySummary      `json:"visibility"`
+	Environment            EnvironmentSummary     `json:"environment"`
+	ExposureFootprint      ExposureFootprint      `json:"exposure_footprint"`
+	RiskyWorkloadFootprint RiskyWorkloadFootprint `json:"risky_workload_footprint"`
+	IdentityFootprint      IdentityFootprint      `json:"identity_footprint"`
+	NextCommands           []NextCommandHint      `json:"next_commands"`
+	KubernetesCounts       map[string]int         `json:"kubernetes_counts"`
+	DockerCounts           map[string]int         `json:"docker_counts,omitempty"`
+	Issues                 []Issue                `json:"issues"`
 }
 
 type RbacOutput struct {
