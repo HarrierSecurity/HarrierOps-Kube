@@ -1,67 +1,51 @@
 # Harrier Ops Kube
 
-Harrier Ops Kube is a Go-first, `kubectl`-first CLI scaffold for offensive-focused Kubernetes
-recon and chaining.
-
-It is part of the HarrierOps tool family:
-
-- Harrier Ops Kube
-- Harrier Ops Azure
-- Harrier Ops AWS
-- Harrier Ops GCP
+Harrier Ops Kube is a Go CLI for offensive-focused Kubernetes recon and chaining.
+It helps operators and testers understand what Kubernetes identity, workload, RBAC, and exposure
+signals they can actually see from the access they already have.
 
 It is being shaped as a sibling project to AzureFox: flat commands, deterministic output
 contracts, artifact emission for every run, and operator-readable output that stays inside the recon
 boundary.
 
-## Current Repo State
+## Currently Supported Commands
 
-The repo currently contains a fixture-backed Go scaffold:
+| Section | Commands |
+| --- | --- |
+| `core` | `inventory` |
+| `identity` | `whoami`, `rbac`, `service-accounts` |
+| `workload` | `workloads` |
+| `exposure` | `exposure` |
 
-- existing planning docs, schemas, fixtures, and output contracts remain the source of truth
-- the current Go implementation focuses on command shape, artifact writing, and regression tests
-- live `kubectl` collection still needs to be rebuilt on top of this scaffold
-- the runnable command set is intentionally narrower than the full planned Phase 1 family
-
-## Current Command Surface
-
-Runnable now:
-
-- `whoami`
-- `inventory`
-- `rbac`
-- `service-accounts`
-- `workloads`
-- `exposure`
-
-Planned Phase 1 commands, not implemented yet:
+Planned Phase 1 commands not implemented yet:
 
 - `permissions`
 - `secrets`
 - `privesc`
 
-Later depth surface, not part of the current runnable Phase 1 core:
+Later-depth surface, not part of the current runnable Phase 1 core:
 
 - `images`
 
-## References
+## Releases
 
-This repo is being shaped against:
+Tagged releases publish prebuilt binaries through GitHub Releases.
+Release artifacts include macOS binaries for both Apple Silicon (`darwin-arm64`) and Intel
+(`darwin-amd64`), plus Linux and Windows builds.
 
-- [OWASP Kubernetes Top Ten](https://owasp.org/www-project-kubernetes-top-ten/)
-- the AzureFox repo and its proof lab
+## CLI Invocation
 
-For project-specific coding and product-boundary guidance, see
-[AGENTS.md](/Users/cfarley/Documents/HarrierOps-Kube/AGENTS.md).
-
-## Quickstart
+Shared flags include `--context`, `--namespace`, `--output`, `--outdir`, and `--debug`.
 
 ```bash
-go test ./...
-HARRIEROPS_KUBE_FIXTURE_DIR=testdata/fixtures/lab_cluster \
-  go run ./cmd/harrierops-kube --outdir /tmp/harrierops-kube-demo whoami --output json
-HARRIEROPS_KUBE_FIXTURE_DIR=testdata/fixtures/lab_cluster \
-  go run ./cmd/harrierops-kube --outdir /tmp/harrierops-kube-demo inventory --output json
+harrierops-kube [global options] <command>
+```
+
+For example:
+
+```bash
+harrierops-kube --output json --outdir ./harrierops-kube-demo whoami
+harrierops-kube --context prod-cluster --namespace payments inventory
 ```
 
 ## Kubernetes Access Assumptions
@@ -107,9 +91,8 @@ instead of pretending the cluster is quiet.
 ## Data Sources
 
 Harrier Ops Kube is `kubectl`-first right now.
-
 For repeatable development and testing, set `HARRIEROPS_KUBE_FIXTURE_DIR` to use local JSON
-fixtures. The current Go scaffold is fixture-backed while the live `kubectl` collectors are being
+fixtures. The current implementation is fixture-backed while the live `kubectl` collectors are
 rebuilt.
 
 ```bash
@@ -129,6 +112,12 @@ All commands write artifacts under `<outdir>/`:
 - `json/<command>.json`
 - `table/<command>.txt`
 - `csv/<command>.csv`
+
+Artifact intent:
+
+- `json/` is the full structured command record.
+- `loot/` is the smaller high-value handoff for quick operator follow-up.
+- `table/` and `csv/` are convenience views rendered from the same underlying command result.
 
 ## Sections
 
@@ -154,7 +143,7 @@ The repo now mirrors the AzureFox-style lightweight publish guardrails:
 - Dependabot for GitHub Actions and Go modules
 - PR template plus contributor and security guidance
 
-## Phase 1 Direction
+## Roadmap
 
 The current Phase 1 direction is Kubernetes-first:
 

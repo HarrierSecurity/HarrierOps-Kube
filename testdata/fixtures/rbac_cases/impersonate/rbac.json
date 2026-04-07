@@ -1,0 +1,30 @@
+{
+  "cluster_roles": [
+    {
+      "name": "impersonator",
+      "rules": [
+        {
+          "verbs": ["impersonate"],
+          "resources": ["serviceaccounts"],
+          "api_groups": [""]
+        }
+      ]
+    }
+  ],
+  "cluster_role_bindings": [
+    {
+      "name": "impersonate-serviceaccounts",
+      "role_ref": {
+        "kind": "ClusterRole",
+        "name": "impersonator"
+      },
+      "subjects": [
+        {
+          "kind": "User",
+          "name": "operator@example.com"
+        }
+      ]
+    }
+  ],
+  "issues": []
+}

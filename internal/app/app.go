@@ -171,20 +171,7 @@ func buildCommandPayload(command string, options Options) (map[string]any, error
 	case "inventory":
 		return buildInventoryPayload(factProvider, query)
 	case "rbac":
-		metadataContext, err := factProvider.MetadataContext(query)
-		if err != nil {
-			return nil, err
-		}
-		data, err := factProvider.RBACBindings(query)
-		if err != nil {
-			return nil, err
-		}
-		metadata := buildMetadata(command, metadataContext, "")
-		return structToMap(model.RbacOutput{
-			Metadata:   metadata,
-			RoleGrants: data.RoleGrants,
-			Issues:     data.Issues,
-		})
+		return buildRBACPayload(factProvider, query)
 	case "service-accounts":
 		metadataContext, err := factProvider.MetadataContext(query)
 		if err != nil {

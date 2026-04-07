@@ -109,6 +109,27 @@ func marshalLoot(command string, payload map[string]any) ([]byte, error) {
 			}
 		}
 	}
+	if command == "rbac" {
+		lootPayload = map[string]any{}
+		for _, key := range []string{"metadata", "issues"} {
+			if value, ok := payload[key]; ok {
+				lootPayload[key] = value
+			}
+		}
+		if grants, err := rowsForKey(payload, "role_grants"); err == nil {
+			selected := make([]map[string]any, 0, len(grants))
+			for _, grant := range grants {
+				if stringify(grant["priority"]) == "high" {
+					selected = append(selected, grant)
+				}
+			}
+			if len(selected) == 0 && len(grants) > 0 {
+				limit := min(3, len(grants))
+				selected = append(selected, grants[:limit]...)
+			}
+			lootPayload["role_grants"] = selected
+		}
+	}
 
 	return json.MarshalIndent(lootPayload, "", "  ")
 }
@@ -119,6 +140,9 @@ func renderTable(command string, payload map[string]any) (string, error) {
 	}
 	if command == "inventory" {
 		return renderInventoryTable(payload)
+	}
+	if command == "rbac" {
+		return renderRBACTable(payload)
 	}
 
 	rowKey, ok := rowCollections[command]
@@ -398,6 +422,43 @@ func renderInventoryTable(payload map[string]any) (string, error) {
 	return builder.String(), nil
 }
 
+func renderRBACTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "role_grants")
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, strings.Join([]string{"priority", "scope", "subject", "role", "binding", "signal", "why_care"}, "\t"))
+	for _, row := range rows {
+		signal := stringify(row["evidence_status"])
+		if dangerous, ok := row["dangerous_rights"].([]any); ok && len(dangerous) > 0 {
+			parts := make([]string, 0, len(dangerous))
+			for _, item := range dangerous {
+				parts = append(parts, stringify(item))
+			}
+			signal = strings.Join(parts, "; ")
+		}
+		fmt.Fprintln(writer, strings.Join([]string{
+			stringify(row["priority"]),
+			stringify(row["scope"]),
+			stringify(row["subject_display"]),
+			stringify(row["role_display_name"]),
+			stringify(row["binding_name"]),
+			signal,
+			stringify(row["why_care"]),
+		}, "\t"))
+	}
+	if err := writer.Flush(); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
+
 func rowsForKey(payload map[string]any, key string) ([]map[string]any, error) {
 	rawRows, ok := payload[key]
 	if !ok {
@@ -472,4 +533,11 @@ func stringify(value any) string {
 		}
 		return string(data)
 	}
+}
+
+func min(left int, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }
