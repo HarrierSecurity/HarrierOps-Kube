@@ -242,53 +242,11 @@ func buildCommandPayload(command string, options Options) (map[string]any, error
 	case "rbac":
 		return buildRBACPayload(factProvider, query)
 	case "service-accounts":
-		metadataContext, err := factProvider.MetadataContext(query)
-		if err != nil {
-			return nil, err
-		}
-		data, err := factProvider.ServiceAccounts(query)
-		if err != nil {
-			return nil, err
-		}
-		metadata := buildMetadata(command, metadataContext, "")
-		return structToMap(model.ServiceAccountsOutput{
-			Metadata:        metadata,
-			ServiceAccounts: data.ServiceAccounts,
-			Findings:        data.Findings,
-			Issues:          data.Issues,
-		})
+		return buildServiceAccountsPayload(factProvider, query)
 	case "workloads":
-		metadataContext, err := factProvider.MetadataContext(query)
-		if err != nil {
-			return nil, err
-		}
-		data, err := factProvider.Workloads(query)
-		if err != nil {
-			return nil, err
-		}
-		metadata := buildMetadata(command, metadataContext, "")
-		return structToMap(model.WorkloadsOutput{
-			Metadata:       metadata,
-			WorkloadAssets: data.WorkloadAssets,
-			Findings:       data.Findings,
-			Issues:         data.Issues,
-		})
+		return buildWorkloadsPayload(factProvider, query)
 	case "exposure":
-		metadataContext, err := factProvider.MetadataContext(query)
-		if err != nil {
-			return nil, err
-		}
-		data, err := factProvider.Exposures(query)
-		if err != nil {
-			return nil, err
-		}
-		metadata := buildMetadata(command, metadataContext, "")
-		return structToMap(model.ExposureOutput{
-			Metadata:       metadata,
-			ExposureAssets: data.ExposureAssets,
-			Findings:       data.Findings,
-			Issues:         data.Issues,
-		})
+		return buildExposurePayload(factProvider, query)
 	default:
 		return nil, fmt.Errorf("unsupported implemented command %q", command)
 	}

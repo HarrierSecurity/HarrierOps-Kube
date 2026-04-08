@@ -54,42 +54,6 @@
       "public": true,
       "related_workloads": [],
       "why_care": "Exposure rises because it has a public-looking target, looks management-facing even without strong backend attribution, backend attribution is heuristic."
-    },
-    {
-      "asset_type": "Pod",
-      "attribution_status": "visibility blocked",
-      "backend_signal": "workload name is visible, but current scope does not confirm backend detail",
-      "exposure_type": "HostPort",
-      "external_targets": [
-        "hostPort:2375"
-      ],
-      "id": "pod-hostport:build:docker-builder",
-      "identity_summary": "",
-      "name": "docker-builder",
-      "namespace": "build",
-      "priority": "low",
-      "public": false,
-      "related_workloads": [
-        "build/docker-builder"
-      ],
-      "why_care": "Exposure rises because it exposes a broad workload path, backend name is visible but detail is blocked."
-    },
-    {
-      "asset_type": "Pod",
-      "attribution_status": "visibility blocked",
-      "backend_signal": "workload name is visible, but current scope does not confirm backend detail",
-      "exposure_type": "HostNetwork",
-      "external_targets": [],
-      "id": "pod-hostnetwork:build:ci-runner",
-      "identity_summary": "",
-      "name": "ci-runner",
-      "namespace": "build",
-      "priority": "low",
-      "public": false,
-      "related_workloads": [
-        "build/ci-runner"
-      ],
-      "why_care": "Exposure rises because it exposes a broad workload path, backend name is visible but detail is blocked."
     }
   ],
   "findings": [
@@ -145,7 +109,7 @@
     "command": "exposure",
     "context_name": "lab-cluster",
     "docker_context": "default",
-    "generated_at": "<generated_at>",
+    "generated_at": "2026-04-08T12:08:19Z",
     "namespace": "default",
     "schema_version": "1.0.0"
   }

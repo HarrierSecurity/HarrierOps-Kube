@@ -142,7 +142,7 @@ type ServiceAccount struct {
 	ID                           string   `json:"id"`
 	Name                         string   `json:"name"`
 	Namespace                    string   `json:"namespace"`
-	AutomountServiceAccountToken bool     `json:"automount_service_account_token"`
+	AutomountServiceAccountToken *bool    `json:"automount_service_account_token,omitempty"`
 	BoundRoles                   []string `json:"bound_roles"`
 	ImagePullSecrets             []string `json:"image_pull_secrets"`
 	SecretNames                  []string `json:"secret_names"`
@@ -152,6 +152,24 @@ type ServiceAccountsData struct {
 	ServiceAccounts []ServiceAccount `json:"service_accounts"`
 	Findings        []Finding        `json:"findings"`
 	Issues          []Issue          `json:"issues"`
+}
+
+type ServiceAccountPath struct {
+	ID                   string   `json:"id"`
+	Name                 string   `json:"name"`
+	Namespace            string   `json:"namespace"`
+	BoundRoles           []string `json:"bound_roles"`
+	RelatedWorkloads     []string `json:"related_workloads"`
+	WorkloadCount        int      `json:"workload_count"`
+	ExposedWorkloads     []string `json:"exposed_workloads"`
+	ExposedWorkloadCount int      `json:"exposed_workload_count"`
+	RiskyWorkloads       []string `json:"risky_workloads"`
+	RiskyWorkloadCount   int      `json:"risky_workload_count"`
+	EvidenceStatus       string   `json:"evidence_status"`
+	Priority             string   `json:"priority"`
+	PowerSummary         string   `json:"power_summary"`
+	TokenPosture         string   `json:"token_posture"`
+	WhyCare              string   `json:"why_care"`
 }
 
 type Workload struct {
@@ -170,7 +188,7 @@ type Workload struct {
 	HostNetwork                  bool     `json:"host_network"`
 	HostPID                      bool     `json:"host_pid"`
 	HostIPC                      bool     `json:"host_ipc"`
-	AutomountServiceAccountToken bool     `json:"automount_service_account_token"`
+	AutomountServiceAccountToken *bool    `json:"automount_service_account_token,omitempty"`
 	SeccompProfile               *string  `json:"seccomp_profile"`
 }
 
@@ -178,6 +196,22 @@ type WorkloadsData struct {
 	WorkloadAssets []Workload `json:"workload_assets"`
 	Findings       []Finding  `json:"findings"`
 	Issues         []Issue    `json:"issues"`
+}
+
+type WorkloadPath struct {
+	ID                  string   `json:"id"`
+	Kind                string   `json:"kind"`
+	Name                string   `json:"name"`
+	Namespace           string   `json:"namespace"`
+	ServiceAccountName  string   `json:"service_account_name"`
+	IdentitySummary     string   `json:"identity_summary"`
+	ServiceAccountPower string   `json:"service_account_power"`
+	Images              []string `json:"images"`
+	RelatedExposures    []string `json:"related_exposures"`
+	PublicExposure      bool     `json:"public_exposure"`
+	RiskSignals         []string `json:"risk_signals"`
+	Priority            string   `json:"priority"`
+	WhyCare             string   `json:"why_care"`
 }
 
 type Exposure struct {
@@ -195,6 +229,22 @@ type ExposureData struct {
 	ExposureAssets []Exposure `json:"exposure_assets"`
 	Findings       []Finding  `json:"findings"`
 	Issues         []Issue    `json:"issues"`
+}
+
+type ExposurePath struct {
+	ID                string   `json:"id"`
+	AssetType         string   `json:"asset_type"`
+	ExposureType      string   `json:"exposure_type"`
+	Name              string   `json:"name"`
+	Namespace         string   `json:"namespace"`
+	Public            bool     `json:"public"`
+	ExternalTargets   []string `json:"external_targets"`
+	RelatedWorkloads  []string `json:"related_workloads"`
+	AttributionStatus string   `json:"attribution_status"`
+	IdentitySummary   string   `json:"identity_summary"`
+	BackendSignal     string   `json:"backend_signal"`
+	Priority          string   `json:"priority"`
+	WhyCare           string   `json:"why_care"`
 }
 
 type WhoAmIOutput struct {
@@ -228,22 +278,22 @@ type RbacOutput struct {
 }
 
 type ServiceAccountsOutput struct {
-	Metadata        contracts.Metadata `json:"metadata"`
-	ServiceAccounts []ServiceAccount   `json:"service_accounts"`
-	Findings        []Finding          `json:"findings"`
-	Issues          []Issue            `json:"issues"`
+	Metadata        contracts.Metadata   `json:"metadata"`
+	ServiceAccounts []ServiceAccountPath `json:"service_accounts"`
+	Findings        []Finding            `json:"findings"`
+	Issues          []Issue              `json:"issues"`
 }
 
 type WorkloadsOutput struct {
 	Metadata       contracts.Metadata `json:"metadata"`
-	WorkloadAssets []Workload         `json:"workload_assets"`
+	WorkloadAssets []WorkloadPath     `json:"workload_assets"`
 	Findings       []Finding          `json:"findings"`
 	Issues         []Issue            `json:"issues"`
 }
 
 type ExposureOutput struct {
 	Metadata       contracts.Metadata `json:"metadata"`
-	ExposureAssets []Exposure         `json:"exposure_assets"`
+	ExposureAssets []ExposurePath     `json:"exposure_assets"`
 	Findings       []Finding          `json:"findings"`
 	Issues         []Issue            `json:"issues"`
 }

@@ -617,6 +617,544 @@ func TestRbacTableOutputStaysOperatorReadable(t *testing.T) {
 	}
 }
 
+func TestServiceAccountsPayloadRanksWorkloadIdentityPaths(t *testing.T) {
+	payload, err := buildCommandPayload("service-accounts", Options{FixtureDir: testFixtureDir(t)})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	rows, ok := payload["service_accounts"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatalf("service_accounts = %T, want non-empty []any", payload["service_accounts"])
+	}
+
+	first := requireMap(t, rows[0])
+	if first["name"] != "fox-admin" {
+		t.Fatalf("first name = %v, want fox-admin", first["name"])
+	}
+	if first["priority"] != "high" {
+		t.Fatalf("first priority = %v, want high", first["priority"])
+	}
+	if first["power_summary"] != "has cluster-wide admin-like access" {
+		t.Fatalf("first power_summary = %v", first["power_summary"])
+	}
+
+	web := findServiceAccountRow(t, rows, "storefront", "web")
+	if web["power_summary"] != "can change workloads" {
+		t.Fatalf("web power_summary = %v, want can change workloads", web["power_summary"])
+	}
+	if web["workload_count"] != float64(1) {
+		t.Fatalf("web workload_count = %v, want 1", web["workload_count"])
+	}
+	if web["priority"] != "medium" {
+		t.Fatalf("web priority = %v, want medium", web["priority"])
+	}
+}
+
+func TestServiceAccountEnrichmentRanksExposedReusedAndQuietPaths(t *testing.T) {
+	rows := enrichServiceAccountPaths(
+		[]model.ServiceAccount{
+			{ID: "serviceaccount:edge:api", Namespace: "edge", Name: "api"},
+			{ID: "serviceaccount:ops:builder", Namespace: "ops", Name: "builder"},
+			{ID: "serviceaccount:default:quiet", Namespace: "default", Name: "quiet", AutomountServiceAccountToken: boolPtr(false)},
+		},
+		model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{ID: "pod:edge:api-5d4f6", Namespace: "edge", Name: "api-5d4f6", ServiceAccountName: "api", AutomountServiceAccountToken: boolPtr(true), HostPathMounts: []string{"/var/run"}},
+				{ID: "pod:ops:builder-a", Namespace: "ops", Name: "builder-a", ServiceAccountName: "builder", AutomountServiceAccountToken: boolPtr(false)},
+				{ID: "pod:ops:builder-b", Namespace: "ops", Name: "builder-b", ServiceAccountName: "builder", AutomountServiceAccountToken: boolPtr(false)},
+				{ID: "pod:default:quiet", Namespace: "default", Name: "quiet", ServiceAccountName: "quiet", AutomountServiceAccountToken: boolPtr(false)},
+			},
+		},
+		model.ExposureData{
+			ExposureAssets: []model.Exposure{
+				{ID: "ingress:edge:api", Namespace: "edge", RelatedWorkloads: []string{"api-5d4f6"}},
+			},
+		},
+		model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{ID: "grant-edge", SubjectKind: "ServiceAccount", SubjectNamespace: stringPtr("edge"), SubjectName: "api", DangerousRights: []string{"change workloads"}, EvidenceStatus: "direct", Scope: "namespace/edge"},
+				{ID: "grant-builder", SubjectKind: "ServiceAccount", SubjectNamespace: stringPtr("ops"), SubjectName: "builder", DangerousRights: []string{"change workloads"}, EvidenceStatus: "direct", Scope: "namespace/ops"},
+			},
+		},
+	)
+
+	if len(rows) != 3 {
+		t.Fatalf("len(rows) = %d, want 3", len(rows))
+	}
+	if rows[0].Namespace != "edge" || rows[0].Name != "api" {
+		t.Fatalf("first row = %s/%s, want edge/api", rows[0].Namespace, rows[0].Name)
+	}
+	if rows[0].Priority != "high" {
+		t.Fatalf("edge/api priority = %s, want high", rows[0].Priority)
+	}
+	if rows[1].Namespace != "ops" || rows[1].Name != "builder" {
+		t.Fatalf("second row = %s/%s, want ops/builder", rows[1].Namespace, rows[1].Name)
+	}
+	if rows[1].WorkloadCount != 2 {
+		t.Fatalf("ops/builder workload_count = %d, want 2", rows[1].WorkloadCount)
+	}
+	if rows[2].Namespace != "default" || rows[2].Name != "quiet" {
+		t.Fatalf("third row = %s/%s, want default/quiet", rows[2].Namespace, rows[2].Name)
+	}
+	if rows[2].Priority != "low" {
+		t.Fatalf("default/quiet priority = %s, want low", rows[2].Priority)
+	}
+	if rows[2].PowerSummary != "" {
+		t.Fatalf("default/quiet power_summary = %q, want empty", rows[2].PowerSummary)
+	}
+}
+
+func TestServiceAccountsPayloadKeepsRowsWhenSupportReadsFail(t *testing.T) {
+	payload, err := buildServiceAccountsPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			Namespace:   "default",
+		},
+		serviceAccountsData: model.ServiceAccountsData{
+			ServiceAccounts: []model.ServiceAccount{
+				{ID: "serviceaccount:default:quiet", Namespace: "default", Name: "quiet"},
+			},
+		},
+		workloadsErr: errors.New("forbidden"),
+		exposuresErr: errors.New("forbidden"),
+		rbacErr:      errors.New("forbidden"),
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildServiceAccountsPayload() error = %v", err)
+	}
+
+	rows, ok := payload["service_accounts"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("service_accounts = %#v, want one row", payload["service_accounts"])
+	}
+
+	issues, ok := payload["issues"].([]any)
+	if !ok || len(issues) < 3 {
+		t.Fatalf("issues = %#v, want propagated support issues", payload["issues"])
+	}
+
+	scopes := map[string]bool{}
+	for _, issue := range issues {
+		mapping := requireMap(t, issue)
+		scope, _ := mapping["scope"].(string)
+		scopes[scope] = true
+	}
+	for _, want := range []string{"service-accounts.workloads", "service-accounts.exposure", "service-accounts.rbac"} {
+		if !scopes[want] {
+			t.Fatalf("missing issue scope %q in %#v", want, scopes)
+		}
+	}
+}
+
+func TestServiceAccountPowerKeepsBestDirectSignalWhenBlockedGrantIsStronger(t *testing.T) {
+	rows := enrichServiceAccountPaths(
+		[]model.ServiceAccount{
+			{ID: "serviceaccount:app:api", Namespace: "app", Name: "api"},
+		},
+		model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{ID: "pod:app:api", Namespace: "app", Name: "api", ServiceAccountName: "api"},
+			},
+		},
+		model.ExposureData{},
+		model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{ID: "grant-direct", SubjectKind: "ServiceAccount", SubjectNamespace: stringPtr("app"), SubjectName: "api", DangerousRights: []string{"read secrets", "change workloads"}, EvidenceStatus: "direct", Scope: "namespace/app"},
+				{ID: "grant-blocked", SubjectKind: "ServiceAccount", SubjectNamespace: stringPtr("app"), SubjectName: "api", DangerousRights: []string{"admin-like wildcard access"}, EvidenceStatus: "visibility blocked", Scope: "cluster-wide"},
+			},
+		},
+	)
+
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if rows[0].PowerSummary != "can change workloads" {
+		t.Fatalf("power_summary = %q, want can change workloads", rows[0].PowerSummary)
+	}
+	if rows[0].EvidenceStatus != "direct" {
+		t.Fatalf("evidence_status = %q, want direct", rows[0].EvidenceStatus)
+	}
+}
+
+func TestServiceAccountTokenPostureKeepsInheritedStateHonest(t *testing.T) {
+	rows := enrichServiceAccountPaths(
+		[]model.ServiceAccount{
+			{ID: "serviceaccount:default:default", Namespace: "default", Name: "default"},
+		},
+		model.WorkloadsData{},
+		model.ExposureData{},
+		model.RBACData{},
+	)
+
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if rows[0].TokenPosture != "service account token posture is inherited or not visible" {
+		t.Fatalf("token_posture = %q", rows[0].TokenPosture)
+	}
+}
+
+func TestWorkloadsPayloadRanksJoinedWorkloadPaths(t *testing.T) {
+	payload, err := buildCommandPayload("workloads", Options{FixtureDir: testFixtureDir(t)})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	rows, ok := payload["workload_assets"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatalf("workload_assets = %T, want non-empty []any", payload["workload_assets"])
+	}
+
+	first := requireMap(t, rows[0])
+	if first["name"] != "fox-admin" {
+		t.Fatalf("first name = %v, want fox-admin", first["name"])
+	}
+	if first["priority"] != "high" {
+		t.Fatalf("first priority = %v, want high", first["priority"])
+	}
+	if !strings.Contains(first["identity_summary"].(string), "cluster-wide admin-like access") {
+		t.Fatalf("first identity_summary = %v, want strong identity path", first["identity_summary"])
+	}
+
+	nodeDebug := findWorkloadRow(t, rows, "build", "node-debug")
+	if nodeDebug["priority"] != "medium" {
+		t.Fatalf("node-debug priority = %v, want medium", nodeDebug["priority"])
+	}
+	riskSignals, ok := nodeDebug["risk_signals"].([]any)
+	if !ok || len(riskSignals) == 0 {
+		t.Fatalf("node-debug risk_signals = %#v, want non-empty", nodeDebug["risk_signals"])
+	}
+}
+
+func TestWorkloadEnrichmentPrioritizesExposureIdentityAndExecution(t *testing.T) {
+	rows := enrichWorkloadPaths(
+		model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{ID: "pod:edge:frontdoor", Namespace: "edge", Name: "frontdoor", Kind: "Pod", ServiceAccountName: "frontdoor", Images: []string{"ghcr.io/example/frontdoor:1.2.3"}},
+				{ID: "pod:ops:builder", Namespace: "ops", Name: "builder", Kind: "Pod", ServiceAccountName: "default", HostPathMounts: []string{"/var/lib/kubelet"}, HostNetwork: true, HostPID: true, AutomountServiceAccountToken: boolPtr(true)},
+				{ID: "pod:default:quiet", Namespace: "default", Name: "quiet", Kind: "Pod", ServiceAccountName: "default"},
+			},
+		},
+		model.ServiceAccountsData{
+			ServiceAccounts: []model.ServiceAccount{
+				{ID: "serviceaccount:edge:frontdoor", Namespace: "edge", Name: "frontdoor"},
+				{ID: "serviceaccount:default:default", Namespace: "default", Name: "default"},
+			},
+		},
+		model.ExposureData{
+			ExposureAssets: []model.Exposure{
+				{ID: "ingress:edge:frontdoor", Namespace: "edge", ExposureType: "Ingress", Public: true, ExternalTargets: []string{"frontdoor.example.com"}, RelatedWorkloads: []string{"frontdoor"}},
+			},
+		},
+		model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{ID: "grant-frontdoor", SubjectKind: "ServiceAccount", SubjectNamespace: stringPtr("edge"), SubjectName: "frontdoor", DangerousRights: []string{"read secrets"}, EvidenceStatus: "direct", Scope: "namespace/edge"},
+			},
+		},
+	)
+
+	if len(rows) != 3 {
+		t.Fatalf("len(rows) = %d, want 3", len(rows))
+	}
+	if rows[0].Namespace != "edge" || rows[0].Name != "frontdoor" {
+		t.Fatalf("first row = %s/%s, want edge/frontdoor", rows[0].Namespace, rows[0].Name)
+	}
+	if !rows[0].PublicExposure {
+		t.Fatalf("edge/frontdoor PublicExposure = false, want true")
+	}
+	if rows[0].ServiceAccountPower != "can read secrets" {
+		t.Fatalf("edge/frontdoor ServiceAccountPower = %q, want can read secrets", rows[0].ServiceAccountPower)
+	}
+	if rows[1].Namespace != "ops" || rows[1].Name != "builder" {
+		t.Fatalf("second row = %s/%s, want ops/builder", rows[1].Namespace, rows[1].Name)
+	}
+	if rows[1].Priority != "medium" {
+		t.Fatalf("ops/builder priority = %s, want medium", rows[1].Priority)
+	}
+	if rows[2].Namespace != "default" || rows[2].Name != "quiet" {
+		t.Fatalf("third row = %s/%s, want default/quiet", rows[2].Namespace, rows[2].Name)
+	}
+	if rows[2].Priority != "low" {
+		t.Fatalf("default/quiet priority = %s, want low", rows[2].Priority)
+	}
+}
+
+func TestWorkloadsPayloadKeepsRowsWhenSupportReadsFail(t *testing.T) {
+	payload, err := buildWorkloadsPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			Namespace:   "default",
+		},
+		workloadsData: model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{ID: "pod:default:quiet", Namespace: "default", Name: "quiet", Kind: "Pod", ServiceAccountName: "default"},
+			},
+		},
+		serviceAccountsErr: errors.New("forbidden"),
+		exposuresErr:       errors.New("forbidden"),
+		rbacErr:            errors.New("forbidden"),
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildWorkloadsPayload() error = %v", err)
+	}
+
+	rows, ok := payload["workload_assets"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("workload_assets = %#v, want one row", payload["workload_assets"])
+	}
+
+	issues, ok := payload["issues"].([]any)
+	if !ok || len(issues) < 3 {
+		t.Fatalf("issues = %#v, want propagated support issues", payload["issues"])
+	}
+
+	scopes := map[string]bool{}
+	for _, issue := range issues {
+		mapping := requireMap(t, issue)
+		scope, _ := mapping["scope"].(string)
+		scopes[scope] = true
+	}
+	for _, want := range []string{"workloads.service-accounts", "workloads.exposure", "workloads.rbac"} {
+		if !scopes[want] {
+			t.Fatalf("missing issue scope %q in %#v", want, scopes)
+		}
+	}
+}
+
+func TestExposurePayloadRanksPublicAttributedPaths(t *testing.T) {
+	payload, err := buildCommandPayload("exposure", Options{FixtureDir: testFixtureDir(t)})
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	rows, ok := payload["exposure_assets"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatalf("exposure_assets = %T, want non-empty []any", payload["exposure_assets"])
+	}
+
+	first := requireMap(t, rows[0])
+	if first["name"] != "web-ing" {
+		t.Fatalf("first name = %v, want web-ing", first["name"])
+	}
+	if first["priority"] != "high" {
+		t.Fatalf("first priority = %v, want high", first["priority"])
+	}
+	if first["attribution_status"] != "heuristic" {
+		t.Fatalf("first attribution_status = %v, want heuristic", first["attribution_status"])
+	}
+	if !strings.Contains(first["identity_summary"].(string), "can change workloads") {
+		t.Fatalf("first identity_summary = %v, want backend identity signal", first["identity_summary"])
+	}
+
+	metrics := findExposureRow(t, rows, "kube-system", "metrics")
+	if metrics["priority"] != "high" {
+		t.Fatalf("metrics priority = %v, want high", metrics["priority"])
+	}
+}
+
+func TestExposureEnrichmentPrioritizesDirectAttributionOverHeuristic(t *testing.T) {
+	rows := enrichExposurePaths(
+		model.ExposureData{
+			ExposureAssets: []model.Exposure{
+				{ID: "ingress:app:frontend-ing", Namespace: "app", Name: "frontend-ing", AssetType: "Ingress", ExposureType: "Ingress", Public: true, ExternalTargets: []string{"front.example.com"}, RelatedWorkloads: []string{"frontend"}},
+				{ID: "service:app:frontend-svc", Namespace: "app", Name: "frontend-svc", AssetType: "Service", ExposureType: "LoadBalancer", Public: true, ExternalTargets: []string{"34.10.0.10"}},
+				{ID: "service:ops:metrics", Namespace: "ops", Name: "metrics", AssetType: "Service", ExposureType: "NodePort", Public: true, ExternalTargets: []string{"nodePort:30090"}},
+			},
+		},
+		model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{ID: "pod:app:frontend", Namespace: "app", Name: "frontend", Kind: "Pod", ServiceAccountName: "frontend"},
+			},
+		},
+		model.ServiceAccountsData{
+			ServiceAccounts: []model.ServiceAccount{
+				{ID: "serviceaccount:app:frontend", Namespace: "app", Name: "frontend"},
+			},
+		},
+		model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{ID: "grant-frontend", SubjectKind: "ServiceAccount", SubjectNamespace: stringPtr("app"), SubjectName: "frontend", DangerousRights: []string{"read secrets"}, EvidenceStatus: "direct", Scope: "namespace/app"},
+			},
+		},
+	)
+
+	if len(rows) != 3 {
+		t.Fatalf("len(rows) = %d, want 3", len(rows))
+	}
+	if rows[0].Name != "frontend-ing" || rows[0].AttributionStatus != "direct" {
+		t.Fatalf("first row = %s (%s), want frontend-ing (direct)", rows[0].Name, rows[0].AttributionStatus)
+	}
+	if rows[1].Name != "frontend-svc" || rows[1].AttributionStatus != "heuristic" {
+		t.Fatalf("second row = %s (%s), want frontend-svc (heuristic)", rows[1].Name, rows[1].AttributionStatus)
+	}
+	if !strings.Contains(rows[1].WhyCare, "backend attribution is heuristic") {
+		t.Fatalf("frontend-svc why_care = %q, want heuristic wording", rows[1].WhyCare)
+	}
+	if rows[2].Name != "metrics" {
+		t.Fatalf("third row = %s, want metrics", rows[2].Name)
+	}
+}
+
+func TestExposurePayloadKeepsRowsWhenSupportReadsFail(t *testing.T) {
+	payload, err := buildExposurePayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			Namespace:   "default",
+		},
+		exposuresData: model.ExposureData{
+			ExposureAssets: []model.Exposure{
+				{ID: "service:default:web", Namespace: "default", Name: "web", AssetType: "Service", ExposureType: "LoadBalancer", Public: true, ExternalTargets: []string{"34.0.0.1"}},
+			},
+		},
+		workloadsErr:       errors.New("forbidden"),
+		serviceAccountsErr: errors.New("forbidden"),
+		rbacErr:            errors.New("forbidden"),
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildExposurePayload() error = %v", err)
+	}
+
+	rows, ok := payload["exposure_assets"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("exposure_assets = %#v, want one row", payload["exposure_assets"])
+	}
+
+	issues, ok := payload["issues"].([]any)
+	if !ok || len(issues) < 3 {
+		t.Fatalf("issues = %#v, want propagated support issues", payload["issues"])
+	}
+
+	scopes := map[string]bool{}
+	for _, issue := range issues {
+		mapping := requireMap(t, issue)
+		scope, _ := mapping["scope"].(string)
+		scopes[scope] = true
+	}
+	for _, want := range []string{"exposure.workloads", "exposure.service-accounts", "exposure.rbac"} {
+		if !scopes[want] {
+			t.Fatalf("missing issue scope %q in %#v", want, scopes)
+		}
+	}
+}
+
+func TestExposureDirectAttributionChoosesStrongestVisibleBackend(t *testing.T) {
+	buildRows := func(relatedWorkloads []string) []model.ExposurePath {
+		return enrichExposurePaths(
+			model.ExposureData{
+				ExposureAssets: []model.Exposure{
+					{ID: "service:app:frontend", Namespace: "app", Name: "frontend", AssetType: "Service", ExposureType: "LoadBalancer", Public: true, ExternalTargets: []string{"34.10.0.10"}, RelatedWorkloads: relatedWorkloads},
+				},
+			},
+			model.WorkloadsData{
+				WorkloadAssets: []model.Workload{
+					{ID: "pod:app:quiet", Namespace: "app", Name: "quiet", Kind: "Pod", ServiceAccountName: "default"},
+					{ID: "pod:app:strong", Namespace: "app", Name: "strong", Kind: "Pod", ServiceAccountName: "strong", HostPathMounts: []string{"/var/run"}},
+				},
+			},
+			model.ServiceAccountsData{
+				ServiceAccounts: []model.ServiceAccount{
+					{ID: "serviceaccount:app:default", Namespace: "app", Name: "default"},
+					{ID: "serviceaccount:app:strong", Namespace: "app", Name: "strong"},
+				},
+			},
+			model.RBACData{
+				RoleGrants: []model.RBACGrant{
+					{ID: "grant-strong", SubjectKind: "ServiceAccount", SubjectNamespace: stringPtr("app"), SubjectName: "strong", DangerousRights: []string{"change workloads"}, EvidenceStatus: "direct", Scope: "namespace/app"},
+				},
+			},
+		)
+	}
+
+	for _, related := range [][]string{{"quiet", "strong"}, {"strong", "quiet"}} {
+		rows := buildRows(related)
+		if len(rows) != 1 {
+			t.Fatalf("len(rows) = %d, want 1", len(rows))
+		}
+		if !strings.Contains(rows[0].IdentitySummary, "app/strong") {
+			t.Fatalf("identity_summary = %q, want strongest backend", rows[0].IdentitySummary)
+		}
+		if !strings.Contains(rows[0].BackendSignal, "strongest visible backend is app/strong") {
+			t.Fatalf("backend_signal = %q, want strongest backend summary", rows[0].BackendSignal)
+		}
+	}
+}
+
+func TestServiceAccountsTableOutputStaysOperatorReadable(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"service-accounts"}, stdout, stderr, []string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir})
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"priority",
+		"service_account",
+		"power",
+		"token_posture",
+		"default/fox-admin",
+		"can change workloads",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestWorkloadsTableOutputStaysOperatorReadable(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"workloads"}, stdout, stderr, []string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir})
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"priority",
+		"workload",
+		"identity",
+		"execution",
+		"default/fox-admin",
+		"cluster-wide admin-like access",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestExposureTableOutputStaysOperatorReadable(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"exposure"}, stdout, stderr, []string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir})
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"priority",
+		"exposure",
+		"attribution",
+		"backend",
+		"web-ing",
+		"can change workloads",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
+	}
+}
+
 func testFixtureDir(t *testing.T) string {
 	t.Helper()
 	return absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "lab_cluster"))
@@ -742,4 +1280,48 @@ func outputArtifactsForTest(command string, payload map[string]any) ([]byte, []b
 		return nil, nil, err
 	}
 	return lootBytes, jsonBytes, nil
+}
+
+func findServiceAccountRow(t *testing.T, rows []any, namespace string, name string) map[string]any {
+	t.Helper()
+	for _, row := range rows {
+		mapping := requireMap(t, row)
+		if mapping["namespace"] == namespace && mapping["name"] == name {
+			return mapping
+		}
+	}
+	t.Fatalf("service account row %s/%s not found", namespace, name)
+	return nil
+}
+
+func findWorkloadRow(t *testing.T, rows []any, namespace string, name string) map[string]any {
+	t.Helper()
+	for _, row := range rows {
+		mapping := requireMap(t, row)
+		if mapping["namespace"] == namespace && mapping["name"] == name {
+			return mapping
+		}
+	}
+	t.Fatalf("workload row %s/%s not found", namespace, name)
+	return nil
+}
+
+func findExposureRow(t *testing.T, rows []any, namespace string, name string) map[string]any {
+	t.Helper()
+	for _, row := range rows {
+		mapping := requireMap(t, row)
+		if mapping["namespace"] == namespace && mapping["name"] == name {
+			return mapping
+		}
+	}
+	t.Fatalf("exposure row %s/%s not found", namespace, name)
+	return nil
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

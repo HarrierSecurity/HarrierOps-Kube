@@ -130,6 +130,69 @@ func marshalLoot(command string, payload map[string]any) ([]byte, error) {
 			lootPayload["role_grants"] = selected
 		}
 	}
+	if command == "service-accounts" {
+		lootPayload = map[string]any{}
+		for _, key := range []string{"metadata", "findings", "issues"} {
+			if value, ok := payload[key]; ok {
+				lootPayload[key] = value
+			}
+		}
+		if serviceAccounts, err := rowsForKey(payload, "service_accounts"); err == nil {
+			selected := make([]map[string]any, 0, len(serviceAccounts))
+			for _, row := range serviceAccounts {
+				if stringify(row["priority"]) == "high" {
+					selected = append(selected, row)
+				}
+			}
+			if len(selected) == 0 && len(serviceAccounts) > 0 {
+				limit := min(3, len(serviceAccounts))
+				selected = append(selected, serviceAccounts[:limit]...)
+			}
+			lootPayload["service_accounts"] = selected
+		}
+	}
+	if command == "workloads" {
+		lootPayload = map[string]any{}
+		for _, key := range []string{"metadata", "findings", "issues"} {
+			if value, ok := payload[key]; ok {
+				lootPayload[key] = value
+			}
+		}
+		if workloads, err := rowsForKey(payload, "workload_assets"); err == nil {
+			selected := make([]map[string]any, 0, len(workloads))
+			for _, row := range workloads {
+				if stringify(row["priority"]) == "high" {
+					selected = append(selected, row)
+				}
+			}
+			if len(selected) == 0 && len(workloads) > 0 {
+				limit := min(3, len(workloads))
+				selected = append(selected, workloads[:limit]...)
+			}
+			lootPayload["workload_assets"] = selected
+		}
+	}
+	if command == "exposure" {
+		lootPayload = map[string]any{}
+		for _, key := range []string{"metadata", "findings", "issues"} {
+			if value, ok := payload[key]; ok {
+				lootPayload[key] = value
+			}
+		}
+		if exposures, err := rowsForKey(payload, "exposure_assets"); err == nil {
+			selected := make([]map[string]any, 0, len(exposures))
+			for _, row := range exposures {
+				if stringify(row["priority"]) == "high" {
+					selected = append(selected, row)
+				}
+			}
+			if len(selected) == 0 && len(exposures) > 0 {
+				limit := min(3, len(exposures))
+				selected = append(selected, exposures[:limit]...)
+			}
+			lootPayload["exposure_assets"] = selected
+		}
+	}
 
 	return json.MarshalIndent(lootPayload, "", "  ")
 }
@@ -143,6 +206,15 @@ func renderTable(command string, payload map[string]any) (string, error) {
 	}
 	if command == "rbac" {
 		return renderRBACTable(payload)
+	}
+	if command == "service-accounts" {
+		return renderServiceAccountsTable(payload)
+	}
+	if command == "workloads" {
+		return renderWorkloadsTable(payload)
+	}
+	if command == "exposure" {
+		return renderExposureTable(payload)
 	}
 
 	rowKey, ok := rowCollections[command]
@@ -450,6 +522,140 @@ func renderRBACTable(payload map[string]any) (string, error) {
 			stringify(row["role_display_name"]),
 			stringify(row["binding_name"]),
 			signal,
+			stringify(row["why_care"]),
+		}, "\t"))
+	}
+	if err := writer.Flush(); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
+
+func renderServiceAccountsTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "service_accounts")
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, strings.Join([]string{"priority", "service_account", "workloads", "power", "token_posture", "why_care"}, "\t"))
+	for _, row := range rows {
+		serviceAccount := strings.TrimPrefix(stringify(row["namespace"])+"/"+stringify(row["name"]), "/")
+		workloads := stringify(row["workload_count"]) + " visible workload"
+		if stringify(row["workload_count"]) != "1" {
+			workloads += "s"
+		}
+		if related, ok := row["related_workloads"].([]any); ok && len(related) == 1 {
+			workloads = stringify(related[0])
+		}
+		power := stringify(row["power_summary"])
+		if power == "" {
+			power = "no strong power signal"
+		}
+		fmt.Fprintln(writer, strings.Join([]string{
+			stringify(row["priority"]),
+			serviceAccount,
+			workloads,
+			power,
+			stringify(row["token_posture"]),
+			stringify(row["why_care"]),
+		}, "\t"))
+	}
+	if err := writer.Flush(); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
+
+func renderWorkloadsTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "workload_assets")
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, strings.Join([]string{"priority", "workload", "identity", "exposure", "execution", "why_care"}, "\t"))
+	for _, row := range rows {
+		workload := strings.TrimPrefix(stringify(row["namespace"])+"/"+stringify(row["name"]), "/")
+		exposure := "no visible exposure path"
+		if related, ok := row["related_exposures"].([]any); ok && len(related) > 0 {
+			parts := make([]string, 0, len(related))
+			for _, item := range related {
+				parts = append(parts, stringify(item))
+			}
+			exposure = strings.Join(parts, "; ")
+		}
+		execution := "no strong risky execution signal"
+		if riskSignals, ok := row["risk_signals"].([]any); ok && len(riskSignals) > 0 {
+			parts := make([]string, 0, len(riskSignals))
+			for _, item := range riskSignals {
+				parts = append(parts, stringify(item))
+			}
+			execution = strings.Join(parts, "; ")
+		}
+		fmt.Fprintln(writer, strings.Join([]string{
+			stringify(row["priority"]),
+			workload,
+			stringify(row["identity_summary"]),
+			exposure,
+			execution,
+			stringify(row["why_care"]),
+		}, "\t"))
+	}
+	if err := writer.Flush(); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
+
+func renderExposureTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "exposure_assets")
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, strings.Join([]string{"priority", "exposure", "targets", "attribution", "backend", "why_care"}, "\t"))
+	for _, row := range rows {
+		exposure := stringify(row["exposure_type"]) + " " + strings.TrimPrefix(stringify(row["namespace"])+"/"+stringify(row["name"]), "/")
+		targets := "no visible external target"
+		if externalTargets, ok := row["external_targets"].([]any); ok && len(externalTargets) > 0 {
+			parts := make([]string, 0, len(externalTargets))
+			for _, item := range externalTargets {
+				parts = append(parts, stringify(item))
+			}
+			targets = strings.Join(parts, "; ")
+		}
+		attribution := stringify(row["attribution_status"])
+		if related, ok := row["related_workloads"].([]any); ok && len(related) > 0 {
+			parts := make([]string, 0, len(related))
+			for _, item := range related {
+				parts = append(parts, stringify(item))
+			}
+			attribution += " -> " + strings.Join(parts, "; ")
+		}
+		backend := stringify(row["backend_signal"])
+		if identitySummary := stringify(row["identity_summary"]); identitySummary != "" {
+			backend = identitySummary
+		}
+		fmt.Fprintln(writer, strings.Join([]string{
+			stringify(row["priority"]),
+			exposure,
+			targets,
+			attribution,
+			backend,
 			stringify(row["why_care"]),
 		}, "\t"))
 	}
