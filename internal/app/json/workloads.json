@@ -79,7 +79,7 @@
     "command": "workloads",
     "context_name": "lab-cluster",
     "docker_context": "default",
-    "generated_at": "<generated_at>",
+    "generated_at": "2026-04-08T12:08:19Z",
     "namespace": "default",
     "schema_version": "1.0.0"
   },
