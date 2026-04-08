@@ -8,6 +8,21 @@ It is being shaped as a sibling project to AzureFox: flat commands, deterministi
 contracts, artifact emission for every run, and operator-readable output that stays inside the recon
 boundary.
 
+## Quickstart
+
+Download the right binary for your platform from GitHub Releases and extract it.
+
+```bash
+harrierops-kube <command> [global options]
+```
+
+By default, Harrier Ops Kube writes artifacts into your current directory. If you want them
+somewhere else, pass `--outdir`:
+
+```bash
+harrierops-kube whoami --output table --outdir ./harrierops-kube-demo
+```
+
 ## Currently Supported Commands
 
 | Section | Commands |
@@ -36,18 +51,19 @@ Release artifacts include macOS binaries for both Apple Silicon (`darwin-arm64`)
 ## CLI Invocation
 
 Shared flags include `--context`, `--namespace`, `--output`, `--outdir`, and `--debug`.
-They can appear before or after the command.
+They work before or after the command, but the examples below lead with the command name for
+readability.
 
 ```bash
-harrierops-kube [global options] <command>
+harrierops-kube <command> [global options]
 ```
 
-For example:
+These forms are equivalent:
 
 ```bash
-harrierops-kube --output json --outdir ./harrierops-kube-demo whoami
-harrierops-kube --context prod-cluster --namespace payments inventory
 harrierops-kube whoami --output json --outdir ./harrierops-kube-demo
+harrierops-kube --output json --outdir ./harrierops-kube-demo whoami
+harrierops-kube inventory --context prod-cluster --namespace payments
 ```
 
 ## Kubernetes Access Assumptions
