@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"harrierops-kube/internal/model"
+	"harrierops-kube/internal/output"
 	"harrierops-kube/internal/provider"
 )
 
@@ -256,5 +257,88 @@ func TestPermissionsPayloadBubblesRBACError(t *testing.T) {
 	}, provider.QueryOptions{})
 	if err == nil || !strings.Contains(err.Error(), "forbidden") {
 		t.Fatalf("err = %v, want RBAC failure surfaced", err)
+	}
+}
+
+func TestPermissionsTableOutputStaysOperatorReadable(t *testing.T) {
+	payload, err := buildPermissionsPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{ContextName: "prod", Namespace: "payments"},
+		whoamiData: model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "analyst@example.com",
+				Kind:       "User",
+				Confidence: "direct",
+			},
+		},
+		rbacData: model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{
+					BindingName:     "analyst-impersonate",
+					Scope:           "cluster-wide",
+					SubjectKind:     "User",
+					SubjectName:     "analyst@example.com",
+					DangerousRights: []string{"impersonate serviceaccounts"},
+					EvidenceStatus:  "direct",
+				},
+			},
+		},
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildPermissionsPayload() error = %v", err)
+	}
+
+	rendered, err := output.Render("table", "permissions", payload)
+	if err != nil {
+		t.Fatalf("output.Render() error = %v", err)
+	}
+
+	for _, want := range []string{
+		"harrierops-kube permissions",
+		"priority",
+		"subject",
+		"confidence",
+		"action",
+		"scope",
+		"next_review",
+		"analyst@example.com (current session)",
+		"can impersonate serviceaccounts",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestPermissionsTableOutputExplainsBlockedIdentity(t *testing.T) {
+	payload, err := buildPermissionsPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{ContextName: "shared-lab", Namespace: "default"},
+		whoamiData: model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "unknown current identity",
+				Kind:       "Unknown",
+				Confidence: "blocked",
+			},
+		},
+		rbacData: model.RBACData{},
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildPermissionsPayload() error = %v", err)
+	}
+
+	rendered, err := output.Render("table", "permissions", payload)
+	if err != nil {
+		t.Fatalf("output.Render() error = %v", err)
+	}
+
+	for _, want := range []string{
+		"harrierops-kube permissions",
+		"info",
+		"No visible current-session capability paths were confirmed from current scope.",
+		"Issues:",
+		"visibility (permissions.identity): Current session identity is not visible from current credentials, so current-foothold capability triage is incomplete.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
 	}
 }

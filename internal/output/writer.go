@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/tabwriter"
 )
 
 var rowCollections = map[string]string{
@@ -264,61 +263,61 @@ func marshalLoot(command string, payload map[string]any) ([]byte, error) {
 }
 
 func renderTable(command string, payload map[string]any) (string, error) {
+	var rendered string
+	var err error
+
 	if command == "whoami" {
-		return renderWhoAmITable(payload)
+		rendered, err = renderWhoAmITable(payload)
+	} else if command == "inventory" {
+		rendered, err = renderInventoryTable(payload)
+	} else if command == "rbac" {
+		rendered, err = renderRBACTable(payload)
+	} else if command == "service-accounts" {
+		rendered, err = renderServiceAccountsTable(payload)
+	} else if command == "workloads" {
+		rendered, err = renderWorkloadsTable(payload)
+	} else if command == "exposure" {
+		rendered, err = renderExposureTable(payload)
+	} else if command == "permissions" {
+		rendered, err = renderPermissionsTable(payload)
+	} else if command == "secrets" {
+		rendered, err = renderSecretsTable(payload)
+	} else if command == "privesc" {
+		rendered, err = renderPrivescTable(payload)
+	} else {
+		rowKey, ok := rowCollections[command]
+		if !ok {
+			rendered, err = renderKeyValueTable(payload)
+		} else {
+			rows, rowsErr := rowsForKey(payload, rowKey)
+			if rowsErr != nil {
+				return "", rowsErr
+			}
+			if len(rows) == 0 {
+				rendered, err = renderSimpleTable([]string{"info"}, [][]string{{"No records"}})
+			} else {
+				headers := collectHeaders(rows)
+				records := make([][]string, 0, len(rows))
+				for _, row := range rows {
+					values := make([]string, 0, len(headers))
+					for _, header := range headers {
+						values = append(values, stringify(row[header]))
+					}
+					records = append(records, values)
+				}
+				rendered, err = renderSimpleTable(headers, records)
+			}
+		}
 	}
-	if command == "inventory" {
-		return renderInventoryTable(payload)
-	}
-	if command == "rbac" {
-		return renderRBACTable(payload)
-	}
-	if command == "service-accounts" {
-		return renderServiceAccountsTable(payload)
-	}
-	if command == "workloads" {
-		return renderWorkloadsTable(payload)
-	}
-	if command == "exposure" {
-		return renderExposureTable(payload)
-	}
-	if command == "secrets" {
-		return renderSecretsTable(payload)
-	}
-	if command == "privesc" {
-		return renderPrivescTable(payload)
-	}
-
-	rowKey, ok := rowCollections[command]
-	if !ok {
-		return renderKeyValueTable(payload)
-	}
-
-	rows, err := rowsForKey(payload, rowKey)
 	if err != nil {
 		return "", err
 	}
-	if len(rows) == 0 {
-		return "", nil
-	}
 
-	headers := collectHeaders(rows)
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
-
-	fmt.Fprintln(writer, strings.Join(headers, "\t"))
-	for _, row := range rows {
-		values := make([]string, 0, len(headers))
-		for _, header := range headers {
-			values = append(values, stringify(row[header]))
-		}
-		fmt.Fprintln(writer, strings.Join(values, "\t"))
+	title := "harrierops-kube " + command
+	if strings.TrimSpace(rendered) == "" {
+		return title + "\n", nil
 	}
-
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+	return title + "\n\n" + rendered, nil
 }
 
 func renderCSV(command string, payload map[string]any) (string, error) {
@@ -375,15 +374,11 @@ func renderKeyValueTable(payload map[string]any) (string, error) {
 	}
 	sort.Strings(keys)
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	records := make([][]string, 0, len(keys))
 	for _, key := range keys {
-		fmt.Fprintf(writer, "%s\t%s\n", key, stringify(payload[key]))
+		records = append(records, []string{key, stringify(payload[key])})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+	return renderSimpleTable([]string{"field", "value"}, records)
 }
 
 func renderWhoAmITable(payload map[string]any) (string, error) {
@@ -458,15 +453,11 @@ func renderWhoAmITable(payload map[string]any) (string, error) {
 		rows = append(rows, [2]string{"Issues", strings.Join(parts, "; ")})
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	records := make([][]string, 0, len(rows))
 	for _, row := range rows {
-		fmt.Fprintf(writer, "%s\t%s\n", row[0], row[1])
+		records = append(records, []string{row[0], row[1]})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+	return renderSimpleTable([]string{"field", "value"}, records)
 }
 
 func renderInventoryTable(payload map[string]any) (string, error) {
@@ -555,15 +546,11 @@ func renderInventoryTable(payload map[string]any) (string, error) {
 		rows = append(rows, [2]string{section.label, strings.Join(parts, ", ")})
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	records := make([][]string, 0, len(rows))
 	for _, row := range rows {
-		fmt.Fprintf(writer, "%s\t%s\n", row[0], row[1])
+		records = append(records, []string{row[0], row[1]})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+	return renderSimpleTable([]string{"field", "value"}, records)
 }
 
 func renderRBACTable(payload map[string]any) (string, error) {
@@ -572,12 +559,10 @@ func renderRBACTable(payload map[string]any) (string, error) {
 		return "", err
 	}
 	if len(rows) == 0 {
-		return "", nil
+		return renderTriageEmptyState(payload, "No visible RBAC grants were confirmed from current scope."), nil
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, strings.Join([]string{"priority", "scope", "subject", "role", "binding", "signal", "why_care"}, "\t"))
+	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		signal := stringify(row["evidence_status"])
 		if dangerous, ok := row["dangerous_rights"].([]any); ok && len(dangerous) > 0 {
@@ -587,20 +572,26 @@ func renderRBACTable(payload map[string]any) (string, error) {
 			}
 			signal = strings.Join(parts, "; ")
 		}
-		fmt.Fprintln(writer, strings.Join([]string{
-			stringify(row["priority"]),
-			stringify(row["scope"]),
-			stringify(row["subject_display"]),
-			stringify(row["role_display_name"]),
-			stringify(row["binding_name"]),
-			signal,
-			stringify(row["why_care"]),
-		}, "\t"))
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				stringify(row["scope"]),
+				stringify(row["subject_display"]),
+				stringify(row["role_display_name"]),
+				stringify(row["binding_name"]),
+				signal,
+			},
+			detail: stringify(row["why_care"]),
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "scope", "subject", "role", "binding", "signal"},
+		records,
+		"why_care",
+		"No visible RBAC grants were confirmed from current scope.",
+	)
 }
 
 func renderServiceAccountsTable(payload map[string]any) (string, error) {
@@ -609,12 +600,10 @@ func renderServiceAccountsTable(payload map[string]any) (string, error) {
 		return "", err
 	}
 	if len(rows) == 0 {
-		return "", nil
+		return renderTriageEmptyState(payload, "No visible service-account identity paths were confirmed from current scope."), nil
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, strings.Join([]string{"priority", "service_account", "workloads", "power", "token_posture", "why_care"}, "\t"))
+	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		serviceAccount := strings.TrimPrefix(stringify(row["namespace"])+"/"+stringify(row["name"]), "/")
 		workloads := stringify(row["workload_count"]) + " visible workload"
@@ -628,19 +617,25 @@ func renderServiceAccountsTable(payload map[string]any) (string, error) {
 		if power == "" {
 			power = "no strong power signal"
 		}
-		fmt.Fprintln(writer, strings.Join([]string{
-			stringify(row["priority"]),
-			serviceAccount,
-			workloads,
-			power,
-			stringify(row["token_posture"]),
-			stringify(row["why_care"]),
-		}, "\t"))
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				serviceAccount,
+				workloads,
+				power,
+				stringify(row["token_posture"]),
+			},
+			detail: stringify(row["why_care"]),
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "service_account", "workloads", "power", "token_posture"},
+		records,
+		"why_care",
+		"No visible service-account identity paths were confirmed from current scope.",
+	)
 }
 
 func renderWorkloadsTable(payload map[string]any) (string, error) {
@@ -649,12 +644,10 @@ func renderWorkloadsTable(payload map[string]any) (string, error) {
 		return "", err
 	}
 	if len(rows) == 0 {
-		return "", nil
+		return renderTriageEmptyState(payload, "No visible workloads rose into triage from current scope."), nil
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, strings.Join([]string{"priority", "workload", "identity", "exposure", "execution", "why_care"}, "\t"))
+	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		workload := strings.TrimPrefix(stringify(row["namespace"])+"/"+stringify(row["name"]), "/")
 		exposure := "no visible exposure path"
@@ -673,19 +666,25 @@ func renderWorkloadsTable(payload map[string]any) (string, error) {
 			}
 			execution = strings.Join(parts, "; ")
 		}
-		fmt.Fprintln(writer, strings.Join([]string{
-			stringify(row["priority"]),
-			workload,
-			stringify(row["identity_summary"]),
-			exposure,
-			execution,
-			stringify(row["why_care"]),
-		}, "\t"))
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				workload,
+				stringify(row["identity_summary"]),
+				exposure,
+				execution,
+			},
+			detail: stringify(row["why_care"]),
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "workload", "identity", "exposure", "execution"},
+		records,
+		"why_care",
+		"No visible workloads rose into triage from current scope.",
+	)
 }
 
 func renderExposureTable(payload map[string]any) (string, error) {
@@ -694,12 +693,10 @@ func renderExposureTable(payload map[string]any) (string, error) {
 		return "", err
 	}
 	if len(rows) == 0 {
-		return "", nil
+		return renderTriageEmptyState(payload, "No visible exposure paths were confirmed from current scope."), nil
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, strings.Join([]string{"priority", "exposure", "targets", "attribution", "backend", "why_care"}, "\t"))
+	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		exposure := stringify(row["exposure_type"]) + " " + strings.TrimPrefix(stringify(row["namespace"])+"/"+stringify(row["name"]), "/")
 		targets := "no visible external target"
@@ -722,19 +719,58 @@ func renderExposureTable(payload map[string]any) (string, error) {
 		if identitySummary := stringify(row["identity_summary"]); identitySummary != "" {
 			backend = identitySummary
 		}
-		fmt.Fprintln(writer, strings.Join([]string{
-			stringify(row["priority"]),
-			exposure,
-			targets,
-			attribution,
-			backend,
-			stringify(row["why_care"]),
-		}, "\t"))
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				exposure,
+				targets,
+				attribution,
+				backend,
+			},
+			detail: stringify(row["why_care"]),
+		})
 	}
-	if err := writer.Flush(); err != nil {
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "exposure", "targets", "attribution", "backend"},
+		records,
+		"why_care",
+		"No visible exposure paths were confirmed from current scope.",
+	)
+}
+
+func renderPermissionsTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "permissions")
+	if err != nil {
 		return "", err
 	}
-	return builder.String(), nil
+	if len(rows) == 0 {
+		return renderTriageEmptyState(payload, "No visible current-session capability paths were confirmed from current scope."), nil
+	}
+
+	records := make([]detailTableRecord, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				stringify(row["subject"]),
+				stringify(row["subject_confidence"]),
+				stringify(row["action_summary"]),
+				stringify(row["scope"]),
+				stringify(row["next_review"]),
+			},
+			detail: stringify(row["why_care"]),
+		})
+	}
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "subject", "confidence", "action", "scope", "next_review"},
+		records,
+		"why_care",
+		"No visible current-session capability paths were confirmed from current scope.",
+	)
 }
 
 func renderSecretsTable(payload map[string]any) (string, error) {
@@ -743,12 +779,10 @@ func renderSecretsTable(payload map[string]any) (string, error) {
 		return "", err
 	}
 	if len(rows) == 0 {
-		return "", nil
+		return renderTriageEmptyState(payload, "No visible secret paths were confirmed from current scope."), nil
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, strings.Join([]string{"priority", "story", "path", "linkage", "target", "why_care"}, "\t"))
+	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		path := stringify(row["source_surface"]) + ": " + stringify(row["safe_label"])
 		linkage := stringify(row["subject"])
@@ -766,19 +800,25 @@ func renderSecretsTable(payload map[string]any) (string, error) {
 		if directUse := stringify(row["direct_use_confidence"]); directUse != "" {
 			target += " (" + directUse + ")"
 		}
-		fmt.Fprintln(writer, strings.Join([]string{
-			stringify(row["priority"]),
-			stringify(row["secret_story"]),
-			path,
-			linkage,
-			target,
-			stringify(row["why_care"]),
-		}, "\t"))
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				stringify(row["secret_story"]),
+				path,
+				linkage,
+				target,
+			},
+			detail: stringify(row["why_care"]),
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "story", "path", "linkage", "target"},
+		records,
+		"why_care",
+		"No visible secret paths were confirmed from current scope.",
+	)
 }
 
 func renderPrivescTable(payload map[string]any) (string, error) {
@@ -787,30 +827,306 @@ func renderPrivescTable(payload map[string]any) (string, error) {
 		return "", err
 	}
 	if len(rows) == 0 {
-		return "", nil
+		return renderTriageEmptyState(payload, "No visible escalation paths were confirmed from the current foothold."), nil
 	}
 
-	var builder strings.Builder
-	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, strings.Join([]string{"priority", "class", "foothold", "action", "outcome", "why_care"}, "\t"))
+	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		outcome := stringify(row["stronger_outcome"])
 		if power := stringify(row["outcome_power"]); power != "" {
 			outcome += " -> " + power
 		}
-		fmt.Fprintln(writer, strings.Join([]string{
-			stringify(row["priority"]),
-			stringify(row["path_class"]),
-			stringify(row["starting_foothold"]),
-			stringify(row["action"]),
-			outcome,
-			stringify(row["why_care"]),
-		}, "\t"))
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				stringify(row["path_class"]),
+				stringify(row["starting_foothold"]),
+				stringify(row["action"]),
+				outcome,
+			},
+			detail: stringify(row["why_care"]),
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "class", "foothold", "action", "outcome"},
+		records,
+		"why_care",
+		"No visible escalation paths were confirmed from the current foothold.",
+	)
+}
+
+type detailTableRecord struct {
+	columns []string
+	detail  string
+}
+
+func renderDetailedTriageTable(payload map[string]any, headers []string, records []detailTableRecord, detailLabel string, emptyMessage string) (string, error) {
+	if len(records) == 0 {
+		return renderTriageEmptyState(payload, emptyMessage), nil
 	}
+
+	var builder strings.Builder
+	for index, record := range records {
+		rendered, err := renderDetailedRecordTable(headers, record.columns, detailLabel, record.detail)
+		if err != nil {
+			return "", err
+		}
+		builder.WriteString(rendered)
+		if index != len(records)-1 {
+			builder.WriteByte('\n')
+		}
+	}
+	appendIssueSection(&builder, payload)
 	return builder.String(), nil
+}
+
+func renderTriageEmptyState(payload map[string]any, emptyMessage string) string {
+	var builder strings.Builder
+	rendered, err := renderSimpleTable([]string{"info"}, [][]string{{emptyMessage}})
+	if err == nil {
+		builder.WriteString(rendered)
+	}
+	appendIssueSection(&builder, payload)
+	return builder.String()
+}
+
+func appendIssueSection(builder *strings.Builder, payload map[string]any) {
+	issues, ok := payload["issues"].([]any)
+	if !ok || len(issues) == 0 {
+		return
+	}
+
+	builder.WriteString("\nIssues:\n")
+	for _, issue := range issues {
+		builder.WriteString("- ")
+		builder.WriteString(formatIssue(issue))
+		builder.WriteString("\n")
+	}
+}
+
+func formatIssue(issue any) string {
+	mapping, ok := issue.(map[string]any)
+	if !ok {
+		return stringify(issue)
+	}
+
+	kind := stringify(mapping["kind"])
+	scope := stringify(mapping["scope"])
+	message := stringify(mapping["message"])
+	if kind != "" && scope != "" && message != "" {
+		return kind + " (" + scope + "): " + message
+	}
+	if kind != "" && message != "" {
+		return kind + ": " + message
+	}
+	if scope != "" && message != "" {
+		return scope + ": " + message
+	}
+	if message != "" {
+		return message
+	}
+	return stringify(issue)
+}
+
+func renderSimpleTable(headers []string, records [][]string) (string, error) {
+	if len(headers) == 0 {
+		return "", nil
+	}
+
+	widths := make([]int, len(headers))
+	for index, header := range headers {
+		widths[index] = len(normalizeTableCell(header))
+	}
+	for _, record := range records {
+		for index := 0; index < len(headers) && index < len(record); index++ {
+			cellWidth := len(normalizeTableCell(record[index]))
+			if cellWidth > widths[index] {
+				widths[index] = cellWidth
+			}
+		}
+	}
+
+	var builder strings.Builder
+	border := asciiTableBorder(widths)
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	builder.WriteString(asciiTableRow(headers, widths))
+	builder.WriteByte('\n')
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	for _, record := range records {
+		row := make([]string, len(headers))
+		for index := range headers {
+			if index < len(record) {
+				row[index] = record[index]
+			}
+		}
+		builder.WriteString(asciiTableRow(row, widths))
+		builder.WriteByte('\n')
+	}
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	return builder.String(), nil
+}
+
+func renderDetailedRecordTable(headers []string, record []string, detailLabel string, detail string) (string, error) {
+	if len(headers) == 0 {
+		return "", nil
+	}
+
+	widths := make([]int, len(headers))
+	for index, header := range headers {
+		widths[index] = len(normalizeTableCell(header))
+	}
+	for index := 0; index < len(headers) && index < len(record); index++ {
+		cellWidth := len(normalizeTableCell(record[index]))
+		if cellWidth > widths[index] {
+			widths[index] = cellWidth
+		}
+	}
+
+	border := asciiTableBorder(widths)
+	var builder strings.Builder
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	builder.WriteString(asciiTableRow(headers, widths))
+	builder.WriteByte('\n')
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+
+	row := make([]string, len(headers))
+	copy(row, record)
+	builder.WriteString(asciiTableRow(row, widths))
+	builder.WriteByte('\n')
+
+	if detail != "" {
+		spanWidth := asciiTableSpanWidth(widths)
+		spanBorder := asciiTableBorder([]int{spanWidth})
+		detailText := detailLabel + ": " + detail
+		builder.WriteString(spanBorder)
+		builder.WriteByte('\n')
+		for _, line := range wrapTableText(detailText, spanWidth) {
+			builder.WriteString(asciiTableSpanningRow(line, asciiTableSpanWidth(widths)))
+			builder.WriteByte('\n')
+		}
+		builder.WriteString(spanBorder)
+		builder.WriteByte('\n')
+		return builder.String(), nil
+	}
+
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	return builder.String(), nil
+}
+
+func asciiTableBorder(widths []int) string {
+	var builder strings.Builder
+	builder.WriteByte('+')
+	for _, width := range widths {
+		builder.WriteString(strings.Repeat("-", width+2))
+		builder.WriteByte('+')
+	}
+	return builder.String()
+}
+
+func asciiTableRow(values []string, widths []int) string {
+	var builder strings.Builder
+	builder.WriteByte('|')
+	for index, width := range widths {
+		value := ""
+		if index < len(values) {
+			value = normalizeTableCell(values[index])
+		}
+		builder.WriteByte(' ')
+		builder.WriteString(value)
+		builder.WriteString(strings.Repeat(" ", width-len(value)))
+		builder.WriteByte(' ')
+		builder.WriteByte('|')
+	}
+	return builder.String()
+}
+
+func asciiTableDetailRow(value string, width int) string {
+	var builder strings.Builder
+	text := normalizeTableCell(value)
+	builder.WriteByte('|')
+	builder.WriteByte(' ')
+	builder.WriteString(text)
+	builder.WriteString(strings.Repeat(" ", width-len(text)))
+	builder.WriteByte(' ')
+	builder.WriteByte('|')
+	return builder.String()
+}
+
+func asciiTableSpanningRow(value string, width int) string {
+	return asciiTableDetailRow(value, width)
+}
+
+func asciiTableSpanWidth(widths []int) int {
+	total := 0
+	for _, width := range widths {
+		total += width
+	}
+	if len(widths) > 1 {
+		total += 3 * (len(widths) - 1)
+	}
+	return total
+}
+
+func wrapTableText(value string, width int) []string {
+	text := normalizeTableCell(value)
+	if width <= 0 || len(text) <= width {
+		return []string{text}
+	}
+
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{text}
+	}
+
+	lines := make([]string, 0, 4)
+	current := words[0]
+	for _, word := range words[1:] {
+		candidate := current + " " + word
+		if len(candidate) <= width {
+			current = candidate
+			continue
+		}
+		if len(current) > width {
+			lines = append(lines, hardWrapTableText(current, width)...)
+		} else {
+			lines = append(lines, current)
+		}
+		current = word
+	}
+	if len(current) > width {
+		lines = append(lines, hardWrapTableText(current, width)...)
+	} else {
+		lines = append(lines, current)
+	}
+	return lines
+}
+
+func hardWrapTableText(value string, width int) []string {
+	if width <= 0 || len(value) <= width {
+		return []string{value}
+	}
+
+	lines := make([]string, 0, (len(value)/width)+1)
+	for start := 0; start < len(value); start += width {
+		end := start + width
+		if end > len(value) {
+			end = len(value)
+		}
+		lines = append(lines, value[start:end])
+	}
+	return lines
+}
+
+func normalizeTableCell(value string) string {
+	return strings.ReplaceAll(value, "\n", " ")
 }
 
 func rowsForKey(payload map[string]any, key string) ([]map[string]any, error) {

@@ -50,23 +50,21 @@ var commandSpecs = []CommandSpec{
 }
 
 func Run(args []string, stdout io.Writer, stderr io.Writer, env []string) int {
-	options, remaining, err := parseRootOptions(args, stderr, env)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 2
+	if len(args) == 0 {
+		if _, err := io.WriteString(stdout, rootHelpText()); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		return 0
 	}
 
-	if len(remaining) == 0 {
+	if isFlagToken(args[0]) {
+		fmt.Fprintln(stderr, "command must come first; use `harrierops-kube <command> [flags]` or `harrierops-kube <command> help`")
 		fmt.Fprintln(stderr, usageText())
 		return 2
 	}
 
-	command := remaining[0]
-
-	if len(remaining) > 1 {
-		fmt.Fprintf(stderr, "unexpected arguments after command %q: %s\n", command, strings.Join(remaining[1:], " "))
-		return 2
-	}
+	command := args[0]
 
 	spec, ok := commandSpec(command)
 	if !ok {
@@ -74,6 +72,35 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, env []string) int {
 		fmt.Fprintln(stderr, usageText())
 		return 2
 	}
+
+	if len(args) > 1 && args[1] == "help" {
+		if len(args) > 2 {
+			fmt.Fprintf(stderr, "unexpected arguments after help for command %q: %s\n", command, strings.Join(args[2:], " "))
+			return 2
+		}
+		topic, ok := helpTopic(command)
+		if !ok {
+			fmt.Fprintf(stderr, "help for command %q is not available\n", command)
+			return 2
+		}
+		if _, err := io.WriteString(stdout, commandHelpText(topic)); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	options, remaining, err := parseRootOptions(args[1:], stderr, env)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 2
+	}
+
+	if len(remaining) > 0 {
+		fmt.Fprintf(stderr, "unexpected arguments after command %q: %s\n", command, strings.Join(remaining, " "))
+		return 2
+	}
+
 	if spec.Status != "implemented" {
 		fmt.Fprintln(stderr, commandStatusText(spec))
 		return 2
@@ -95,7 +122,7 @@ func parseRootOptions(args []string, stderr io.Writer, env []string) (Options, [
 	flags.StringVar(&options.OutDir, "outdir", "", "Output directory for emitted artifacts")
 	flags.BoolVar(&options.Debug, "debug", false, "Enable verbose errors")
 
-	if err := flags.Parse(normalizeRootArgs(args)); err != nil {
+	if err := flags.Parse(args); err != nil {
 		return Options{}, nil, err
 	}
 
@@ -110,53 +137,6 @@ func parseRootOptions(args []string, stderr io.Writer, env []string) (Options, [
 	}
 
 	return options, flags.Args(), nil
-}
-
-func normalizeRootArgs(args []string) []string {
-	commandIndex := firstPositionalIndex(args)
-	if commandIndex == -1 {
-		return args
-	}
-
-	reordered := make([]string, 0, len(args))
-	reordered = append(reordered, args[:commandIndex]...)
-
-	trailingPositionals := make([]string, 0, len(args)-commandIndex-1)
-	for index := commandIndex + 1; index < len(args); {
-		token := args[index]
-		if isFlagToken(token) {
-			reordered = append(reordered, token)
-			if rootFlagConsumesNextArg(token) && index+1 < len(args) {
-				reordered = append(reordered, args[index+1])
-				index += 2
-				continue
-			}
-			index++
-			continue
-		}
-
-		trailingPositionals = append(trailingPositionals, token)
-		index++
-	}
-
-	reordered = append(reordered, args[commandIndex])
-	reordered = append(reordered, trailingPositionals...)
-	return reordered
-}
-
-func firstPositionalIndex(args []string) int {
-	for index := 0; index < len(args); {
-		token := args[index]
-		if !isFlagToken(token) {
-			return index
-		}
-		if rootFlagConsumesNextArg(token) && index+1 < len(args) {
-			index += 2
-			continue
-		}
-		index++
-	}
-	return -1
 }
 
 func isFlagToken(token string) bool {
@@ -334,12 +314,14 @@ func resolveFixtureDir(env []string) string {
 
 func usageText() string {
 	return strings.Join([]string{
-		"usage: harrierops-kube [global options] <command> [command options]",
+		"usage: harrierops-kube <command> [global options]",
+		"       harrierops-kube <command> help",
 		"",
 		commandListLine("implemented commands", commandNamesWithStatus("implemented")),
 		commandListLine("planned phase 1 commands", commandNamesWithStatus("planned-phase1")),
 		commandListLine("later depth surfaces", commandNamesWithStatus("later-depth")),
 		commandListLine("implemented sections", implementedSectionNames()),
+		"run `harrierops-kube <command> help` for operator-readable command summaries",
 	}, "\n")
 }
 
