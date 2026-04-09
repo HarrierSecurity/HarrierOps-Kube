@@ -35,9 +35,9 @@ jobs:
           go build -o /tmp/harrierops-kube ./cmd/harrierops-kube
           HARRIEROPS_KUBE_FIXTURE_DIR=testdata/fixtures/lab_cluster \
             /tmp/harrierops-kube \
+            whoami \
             --outdir /tmp/harrierops-kube-release-smoke \
             --output json \
-            whoami \
             >/dev/null
 
   build:

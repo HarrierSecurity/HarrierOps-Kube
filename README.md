@@ -28,15 +28,9 @@ harrierops-kube whoami --output table --outdir ./harrierops-kube-demo
 | Section | Commands |
 | --- | --- |
 | `core` | `inventory` |
-| `identity` | `whoami`, `rbac`, `service-accounts` |
+| `identity` | `whoami`, `rbac`, `service-accounts`, `permissions` |
 | `workload` | `workloads` |
-| `exposure` | `exposure` |
-
-Planned Phase 1 commands not implemented yet:
-
-- `permissions`
-- `secrets`
-- `privesc`
+| `exposure` | `exposure`, `secrets`, `privesc` |
 
 Later-depth surface, not part of the current runnable Phase 1 core:
 
@@ -51,19 +45,18 @@ Release artifacts include macOS binaries for both Apple Silicon (`darwin-arm64`)
 ## CLI Invocation
 
 Shared flags include `--context`, `--namespace`, `--output`, `--outdir`, and `--debug`.
-They work before or after the command, but the examples below lead with the command name for
-readability.
+Commands come first, then shared flags or `help`.
 
 ```bash
 harrierops-kube <command> [global options]
 ```
 
-These forms are equivalent:
+Examples:
 
 ```bash
 harrierops-kube whoami --output json --outdir ./harrierops-kube-demo
-harrierops-kube --output json --outdir ./harrierops-kube-demo whoami
 harrierops-kube inventory --context prod-cluster --namespace payments
+harrierops-kube permissions help
 ```
 
 ## Kubernetes Access Assumptions
@@ -139,10 +132,10 @@ Artifact intent:
 
 ## Sections
 
-- `identity`: `whoami`, `rbac`, `service-accounts`
+- `identity`: `whoami`, `rbac`, `service-accounts`, `permissions`
 - `core`: `inventory`
 - `workload`: `workloads`
-- `exposure`: `exposure`
+- `exposure`: `exposure`, `secrets`, `privesc`
 
 ## Development
 
@@ -165,7 +158,6 @@ The repo now mirrors the AzureFox-style lightweight publish guardrails:
 
 The current Phase 1 direction is Kubernetes-first:
 
-- `whoami`, `inventory`, `rbac`, `service-accounts`, `workloads`, and `exposure` are the current runnable scaffold
-- `permissions`, `secrets`, and `privesc` remain part of the planned Phase 1 core
+- `whoami`, `inventory`, `rbac`, `service-accounts`, `permissions`, `workloads`, `exposure`, `secrets`, and `privesc` are the current runnable Phase 1 core
 - `images` stays demoted to a later depth surface unless implementation proves it should move up
 - output should stay plain-language, operator-readable, and inside the recon boundary
