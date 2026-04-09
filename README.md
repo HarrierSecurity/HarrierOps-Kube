@@ -1,60 +1,80 @@
 # Harrier Ops Kube
 
-Harrier Ops Kube is a Go CLI for operator-first Kubernetes recon.
-It helps operators and testers answer the questions that matter fastest:
+Harrier Ops Kube tells you what your current Kubernetes foothold can actually do, what it can reach, and what matters next.
 
-- what foothold am I really using
-- what looks reachable
-- which workload matters first
-- which identity, secret, or escalation path should I inspect next
+> Most Kubernetes tools give you objects.
+> Most inventory views tell you what exists.
+> Harrier Ops Kube tells you what your foothold means.
+> It prioritizes consequence, attack paths, and the next move.
 
-## Why Harrier Ops Kube
+## Why Run This First
 
-Most Kubernetes tooling is built for cluster administration, object management, or raw inventory.
+Run this first when:
 
-Harrier Ops Kube is built for operator triage:
+- you have a `kubeconfig` and need to know whether it lands near exposed workloads, meaningful
+  service accounts, or stronger control paths
+- you landed in a pod and need to know what identity, token, or host-level access that foothold
+  really carries
+- you found a service account or token reference and need to know whether it is just background
+  noise or the start of a real escalation path
 
-- ground the current session before trusting deeper output
-- rank the workload, identity, and exposure paths that actually matter
-- keep output readable enough that the next command is obvious
+This is not the point where you want a generic object dump.
+This is the point where you want to know what your foothold changes right now.
 
-## Install
+## Fast Proof
 
-Download the right binary for your platform from GitHub Releases and extract it.
+In seconds, Harrier Ops Kube shows you:
 
-## Run It
+- what identity you are really running as
+- what cluster, namespace, and context you actually landed in
+- which workloads and services look exposed first
+- which service accounts and token paths matter
+- which visible paths look like real escalation or control expansion leads
 
-Start with the current foothold and the cluster shape:
+## Quickstart
+
+Run the foothold, edge, workload, and escalation flow:
 
 ```bash
 harrierops-kube whoami
 harrierops-kube inventory
-```
-
-Then move into the visible edge and the running things that matter:
-
-```bash
 harrierops-kube exposure
 harrierops-kube workloads
+harrierops-kube privesc
 ```
 
-## Example Output
+If identity and token paths matter more than the edge first:
 
-`harrierops-kube service-accounts`
+```bash
+harrierops-kube service-accounts
+```
 
-| priority | service account | workloads | power | token posture |
-| --- | --- | --- | --- | --- |
-| `high` | `default/fox-admin` | `default/fox-admin` | `has cluster-wide admin-like access` | `token auto-mount is visible on 1 attached workload; legacy token secret is visible` |
-| `medium` | `storefront/web` | `storefront/web-5d4f6` | `can change workloads` | `visible workloads disable token auto-mount` |
+## Operator Outcome
 
-Harrier Ops Kube is not just listing Kubernetes objects.
-It ranks the paths that matter, explains why they matter, and points to the next review surface.
+After one short pass, you understand:
+
+- what your foothold really is
+- which workloads, identities, and exposed paths deserve attention first
+- whether there is a believable token, service-account, or escalation story nearby
+- where to go next without reading the whole cluster like a spreadsheet
 
 ## What Makes This Different
 
-- Foothold-first, not just object-first
-- Focused on attack paths and consequence, not raw cluster data
-- Output designed for operators who need to decide what matters next
+- Foothold-first: it starts from the access you already have, not from a generic cluster census.
+- Prioritized: it lifts the workloads, identities, and paths that change the next move.
+- Attack-path-aware: it keeps exposure, service accounts, tokens, and escalation in the same
+  operator workflow.
+- Not an object dump: it is built to reduce noise, not produce more of it.
+
+## Use Cases
+
+- You have cluster access through a `kubeconfig` and need fast blast-radius triage.
+- You landed in a pod and need to understand the service account, token posture, and nearby risk.
+- You are validating how far a foothold, token, or service account could realistically go.
+
+## Install
+
+Download the right binary for your platform from GitHub Releases and extract it.
 
 ## Currently Supported Commands
 
