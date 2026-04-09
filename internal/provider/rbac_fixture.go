@@ -205,6 +205,28 @@ func summarizeDangerousRights(rules []rawPolicyRule) []string {
 		if touchesResource(rule.Verbs, rule.Resources, []string{"create", "*"}, []string{"pods/exec"}) {
 			add("exec into pods")
 		}
+		if touchesResource(
+			rule.Verbs,
+			rule.Resources,
+			[]string{"create", "update", "patch", "delete", "*"},
+			[]string{
+				"mutatingwebhookconfigurations",
+				"validatingwebhookconfigurations",
+				"validatingadmissionpolicies",
+				"validatingadmissionpolicybindings",
+				"podsecuritypolicies",
+			},
+		) {
+			add("change admission or policy")
+		}
+		if touchesResource(
+			rule.Verbs,
+			rule.Resources,
+			[]string{"get", "list", "watch", "create", "update", "patch", "delete", "*"},
+			[]string{"nodes", "nodes/proxy", "nodes/status", "nodes/metrics"},
+		) {
+			add("touch nodes")
+		}
 	}
 
 	sort.SliceStable(signals, func(i, j int) bool {
@@ -221,8 +243,12 @@ func dangerousRightScore(signal string) int {
 		return 50
 	case "bind roles", "escalate roles":
 		return 45
+	case "touch nodes":
+		return 40
 	case "change workloads", "exec into pods":
 		return 35
+	case "change admission or policy":
+		return 30
 	case "read secrets":
 		return 25
 	default:

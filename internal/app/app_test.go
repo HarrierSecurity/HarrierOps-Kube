@@ -24,6 +24,9 @@ func TestCLICommandsSmoke(t *testing.T) {
 		"service-accounts",
 		"workloads",
 		"exposure",
+		"permissions",
+		"secrets",
+		"privesc",
 	}
 
 	for _, command := range commands {
@@ -173,29 +176,8 @@ func TestCLIStillRejectsTrailingArgsWhenSharedFlagsMoveAround(t *testing.T) {
 }
 
 func TestPlannedPhaseOneCommandsReturnHelpfulError(t *testing.T) {
-	fixtureDir := testFixtureDir(t)
-	for _, command := range []string{"permissions", "secrets", "privesc"} {
-		t.Run(command, func(t *testing.T) {
-			stdout := &bytes.Buffer{}
-			stderr := &bytes.Buffer{}
-
-			exitCode := Run(
-				[]string{command},
-				stdout,
-				stderr,
-				[]string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir},
-			)
-
-			if exitCode != 2 {
-				t.Fatalf("exit code = %d, want 2", exitCode)
-			}
-			if stdout.Len() != 0 {
-				t.Fatalf("stdout = %q, want empty", stdout.String())
-			}
-			if !strings.Contains(stderr.String(), "planned for Phase 1 but is not implemented yet") {
-				t.Fatalf("stderr = %q, want planned-phase1 guidance", stderr.String())
-			}
-		})
+	if len(commandNamesWithStatus("planned-phase1")) != 0 {
+		t.Fatalf("planned phase 1 commands = %#v, want none", commandNamesWithStatus("planned-phase1"))
 	}
 }
 
@@ -222,10 +204,10 @@ func TestUsageTextReflectsCurrentSurface(t *testing.T) {
 		t.Fatalf("usage text still references all-checks: %q", usage)
 	}
 	for _, want := range []string{
-		"implemented commands: whoami, inventory, rbac, service-accounts, workloads, exposure",
-		"planned phase 1 commands: permissions, secrets, privesc",
+		"implemented commands: whoami, inventory, rbac, service-accounts, workloads, exposure, permissions, secrets, privesc",
+		"planned phase 1 commands: none",
 		"later depth surfaces: images",
-		"implemented sections: identity, core, workload, exposure",
+		"implemented sections: identity, core, workload, exposure, secrets",
 	} {
 		if !strings.Contains(usage, want) {
 			t.Fatalf("usage text missing %q in %q", want, usage)
@@ -244,6 +226,9 @@ func TestGoldenOutputsForImplementedCommands(t *testing.T) {
 		"service-accounts",
 		"exposure",
 		"workloads",
+		"permissions",
+		"secrets",
+		"privesc",
 	} {
 		t.Run(command, func(t *testing.T) {
 			payload, err := buildCommandPayload(command, Options{FixtureDir: fixtureDir})

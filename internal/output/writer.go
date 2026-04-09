@@ -17,6 +17,9 @@ var rowCollections = map[string]string{
 	"service-accounts": "service_accounts",
 	"exposure":         "exposure_assets",
 	"workloads":        "workload_assets",
+	"permissions":      "permissions",
+	"secrets":          "secret_paths",
+	"privesc":          "escalation_paths",
 	"images":           "image_assets",
 }
 
@@ -193,6 +196,69 @@ func marshalLoot(command string, payload map[string]any) ([]byte, error) {
 			lootPayload["exposure_assets"] = selected
 		}
 	}
+	if command == "permissions" {
+		lootPayload = map[string]any{}
+		for _, key := range []string{"metadata", "issues"} {
+			if value, ok := payload[key]; ok {
+				lootPayload[key] = value
+			}
+		}
+		if permissions, err := rowsForKey(payload, "permissions"); err == nil {
+			selected := make([]map[string]any, 0, len(permissions))
+			for _, row := range permissions {
+				if stringify(row["priority"]) == "high" {
+					selected = append(selected, row)
+				}
+			}
+			if len(selected) == 0 && len(permissions) > 0 {
+				limit := min(3, len(permissions))
+				selected = append(selected, permissions[:limit]...)
+			}
+			lootPayload["permissions"] = selected
+		}
+	}
+	if command == "secrets" {
+		lootPayload = map[string]any{}
+		for _, key := range []string{"metadata", "issues"} {
+			if value, ok := payload[key]; ok {
+				lootPayload[key] = value
+			}
+		}
+		if secretPaths, err := rowsForKey(payload, "secret_paths"); err == nil {
+			selected := make([]map[string]any, 0, len(secretPaths))
+			for _, row := range secretPaths {
+				if stringify(row["priority"]) == "high" {
+					selected = append(selected, row)
+				}
+			}
+			if len(selected) == 0 && len(secretPaths) > 0 {
+				limit := min(3, len(secretPaths))
+				selected = append(selected, secretPaths[:limit]...)
+			}
+			lootPayload["secret_paths"] = selected
+		}
+	}
+	if command == "privesc" {
+		lootPayload = map[string]any{}
+		for _, key := range []string{"metadata", "issues"} {
+			if value, ok := payload[key]; ok {
+				lootPayload[key] = value
+			}
+		}
+		if escalationPaths, err := rowsForKey(payload, "escalation_paths"); err == nil {
+			selected := make([]map[string]any, 0, len(escalationPaths))
+			for _, row := range escalationPaths {
+				if stringify(row["priority"]) == "high" {
+					selected = append(selected, row)
+				}
+			}
+			if len(selected) == 0 && len(escalationPaths) > 0 {
+				limit := min(3, len(escalationPaths))
+				selected = append(selected, escalationPaths[:limit]...)
+			}
+			lootPayload["escalation_paths"] = selected
+		}
+	}
 
 	return json.MarshalIndent(lootPayload, "", "  ")
 }
@@ -215,6 +281,12 @@ func renderTable(command string, payload map[string]any) (string, error) {
 	}
 	if command == "exposure" {
 		return renderExposureTable(payload)
+	}
+	if command == "secrets" {
+		return renderSecretsTable(payload)
+	}
+	if command == "privesc" {
+		return renderPrivescTable(payload)
 	}
 
 	rowKey, ok := rowCollections[command]
@@ -656,6 +728,82 @@ func renderExposureTable(payload map[string]any) (string, error) {
 			targets,
 			attribution,
 			backend,
+			stringify(row["why_care"]),
+		}, "\t"))
+	}
+	if err := writer.Flush(); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
+
+func renderSecretsTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "secret_paths")
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, strings.Join([]string{"priority", "story", "path", "linkage", "target", "why_care"}, "\t"))
+	for _, row := range rows {
+		path := stringify(row["source_surface"]) + ": " + stringify(row["safe_label"])
+		linkage := stringify(row["subject"])
+		if related, ok := row["related_workloads"].([]any); ok && len(related) > 0 {
+			parts := make([]string, 0, len(related))
+			for _, item := range related {
+				parts = append(parts, stringify(item))
+			}
+			linkage += " -> " + strings.Join(parts, "; ")
+		}
+		target := stringify(row["likely_secret_type"])
+		if family := stringify(row["likely_target_family"]); family != "" {
+			target += " -> " + family
+		}
+		if directUse := stringify(row["direct_use_confidence"]); directUse != "" {
+			target += " (" + directUse + ")"
+		}
+		fmt.Fprintln(writer, strings.Join([]string{
+			stringify(row["priority"]),
+			stringify(row["secret_story"]),
+			path,
+			linkage,
+			target,
+			stringify(row["why_care"]),
+		}, "\t"))
+	}
+	if err := writer.Flush(); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
+
+func renderPrivescTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "escalation_paths")
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	writer := tabwriter.NewWriter(&builder, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, strings.Join([]string{"priority", "class", "foothold", "action", "outcome", "why_care"}, "\t"))
+	for _, row := range rows {
+		outcome := stringify(row["stronger_outcome"])
+		if power := stringify(row["outcome_power"]); power != "" {
+			outcome += " -> " + power
+		}
+		fmt.Fprintln(writer, strings.Join([]string{
+			stringify(row["priority"]),
+			stringify(row["path_class"]),
+			stringify(row["starting_foothold"]),
+			stringify(row["action"]),
+			outcome,
 			stringify(row["why_care"]),
 		}, "\t"))
 	}

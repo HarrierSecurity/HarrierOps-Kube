@@ -43,9 +43,9 @@ var commandSpecs = []CommandSpec{
 	{Name: "service-accounts", Section: "identity", Status: "implemented"},
 	{Name: "workloads", Section: "workload", Status: "implemented"},
 	{Name: "exposure", Section: "exposure", Status: "implemented"},
-	{Name: "permissions", Section: "identity", Status: "planned-phase1"},
-	{Name: "secrets", Section: "identity", Status: "planned-phase1"},
-	{Name: "privesc", Section: "identity", Status: "planned-phase1"},
+	{Name: "permissions", Section: "identity", Status: "implemented"},
+	{Name: "secrets", Section: "secrets", Status: "implemented"},
+	{Name: "privesc", Section: "identity", Status: "implemented"},
 	{Name: "images", Section: "supply-chain", Status: "later-depth"},
 }
 
@@ -250,6 +250,12 @@ func buildCommandPayload(command string, options Options) (map[string]any, error
 		return buildWorkloadsPayload(factProvider, query)
 	case "exposure":
 		return buildExposurePayload(factProvider, query)
+	case "permissions":
+		return buildPermissionsPayload(factProvider, query)
+	case "secrets":
+		return buildSecretsPayload(factProvider, query)
+	case "privesc":
+		return buildPrivescPayload(factProvider, query)
 	default:
 		return nil, fmt.Errorf("unsupported implemented command %q", command)
 	}
@@ -330,11 +336,18 @@ func usageText() string {
 	return strings.Join([]string{
 		"usage: harrierops-kube [global options] <command> [command options]",
 		"",
-		"implemented commands: " + strings.Join(commandNamesWithStatus("implemented"), ", "),
-		"planned phase 1 commands: " + strings.Join(commandNamesWithStatus("planned-phase1"), ", "),
-		"later depth surfaces: " + strings.Join(commandNamesWithStatus("later-depth"), ", "),
-		"implemented sections: " + strings.Join(implementedSectionNames(), ", "),
+		commandListLine("implemented commands", commandNamesWithStatus("implemented")),
+		commandListLine("planned phase 1 commands", commandNamesWithStatus("planned-phase1")),
+		commandListLine("later depth surfaces", commandNamesWithStatus("later-depth")),
+		commandListLine("implemented sections", implementedSectionNames()),
 	}, "\n")
+}
+
+func commandListLine(label string, values []string) string {
+	if len(values) == 0 {
+		return label + ": none"
+	}
+	return label + ": " + strings.Join(values, ", ")
 }
 
 func commandStatusText(spec CommandSpec) string {

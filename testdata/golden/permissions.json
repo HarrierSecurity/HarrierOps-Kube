@@ -1,0 +1,13 @@
+{
+  "issues": [],
+  "metadata": {
+    "cluster_name": null,
+    "command": "permissions",
+    "context_name": "lab-cluster",
+    "docker_context": "default",
+    "generated_at": "<generated_at>",
+    "namespace": "default",
+    "schema_version": "1.0.0"
+  },
+  "permissions": []
+}

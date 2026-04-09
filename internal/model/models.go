@@ -247,6 +247,55 @@ type ExposurePath struct {
 	WhyCare           string   `json:"why_care"`
 }
 
+type PermissionPath struct {
+	ID                string   `json:"id"`
+	Subject           string   `json:"subject"`
+	SubjectConfidence string   `json:"subject_confidence"`
+	Scope             string   `json:"scope"`
+	ActionSummary     string   `json:"action_summary"`
+	EvidenceStatus    string   `json:"evidence_status"`
+	RelatedBindings   []string `json:"related_bindings"`
+	Priority          string   `json:"priority"`
+	WhyCare           string   `json:"why_care"`
+	NextReview        string   `json:"next_review,omitempty"`
+}
+
+type SecretPath struct {
+	ID                  string   `json:"id"`
+	SecretStory         string   `json:"secret_story"`
+	SafeLabel           string   `json:"safe_label"`
+	SourceSurface       string   `json:"source_surface"`
+	Namespace           string   `json:"namespace"`
+	Subject             string   `json:"subject"`
+	RelatedWorkloads    []string `json:"related_workloads"`
+	LikelySecretType    string   `json:"likely_secret_type"`
+	LikelyTargetFamily  string   `json:"likely_target_family"`
+	Confidence          string   `json:"confidence"`
+	DirectUseConfidence string   `json:"direct_use_confidence"`
+	TrustPath           string   `json:"trust_path"`
+	OperatorSignal      string   `json:"operator_signal"`
+	Priority            string   `json:"priority"`
+	WhyCare             string   `json:"why_care"`
+	NextReview          string   `json:"next_review,omitempty"`
+}
+
+type PrivescPath struct {
+	ID                string `json:"id"`
+	StartingFoothold  string `json:"starting_foothold"`
+	SubjectConfidence string `json:"subject_confidence"`
+	PathClass         string `json:"path_class"`
+	Action            string `json:"action"`
+	StrongerOutcome   string `json:"stronger_outcome"`
+	OutcomePower      string `json:"outcome_power,omitempty"`
+	Confidence        string `json:"confidence"`
+	OperatorSignal    string `json:"operator_signal"`
+	Priority          string `json:"priority"`
+	WhatIsProven      string `json:"what_is_proven"`
+	WhatIsMissing     string `json:"what_is_missing"`
+	WhyCare           string `json:"why_care"`
+	NextReview        string `json:"next_review,omitempty"`
+}
+
 type WhoAmIOutput struct {
 	Metadata           contracts.Metadata `json:"metadata"`
 	KubeContext        KubeContext        `json:"kube_context"`
@@ -296,4 +345,22 @@ type ExposureOutput struct {
 	ExposureAssets []ExposurePath     `json:"exposure_assets"`
 	Findings       []Finding          `json:"findings"`
 	Issues         []Issue            `json:"issues"`
+}
+
+type PermissionsOutput struct {
+	Metadata    contracts.Metadata `json:"metadata"`
+	Permissions []PermissionPath   `json:"permissions"`
+	Issues      []Issue            `json:"issues"`
+}
+
+type SecretsOutput struct {
+	Metadata    contracts.Metadata `json:"metadata"`
+	SecretPaths []SecretPath       `json:"secret_paths"`
+	Issues      []Issue            `json:"issues"`
+}
+
+type PrivescOutput struct {
+	Metadata   contracts.Metadata `json:"metadata"`
+	Escalation []PrivescPath      `json:"escalation_paths"`
+	Issues     []Issue            `json:"issues"`
 }

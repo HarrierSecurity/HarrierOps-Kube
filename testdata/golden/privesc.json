@@ -1,0 +1,46 @@
+{
+  "escalation_paths": [
+    {
+      "action": "no current action is proven against default/fox-admin",
+      "confidence": "possible",
+      "id": "privesc:posture:service-account:default:fox-admin",
+      "next_review": "service-accounts",
+      "operator_signal": "bookmark",
+      "outcome_power": "has cluster-wide admin-like access",
+      "path_class": "posture-only",
+      "priority": "low",
+      "starting_foothold": "fox-operator (current foothold)",
+      "stronger_outcome": "stronger service-account path if control is gained",
+      "subject_confidence": "direct",
+      "what_is_missing": "Current foothold control of that service account, token path, or attached workload is not proven.",
+      "what_is_proven": "Service account default/fox-admin has a stronger identity path visible now.",
+      "why_care": "Lead stays visible because identity path stands out because it has cluster-wide admin-like access, touches 1 risky workload context, is used by 1 visible workload, has a visible token path."
+    },
+    {
+      "action": "no current action is proven against storefront/web-5d4f6",
+      "confidence": "possible",
+      "id": "privesc:posture:workload:storefront:web-5d4f6",
+      "next_review": "workloads",
+      "operator_signal": "bookmark",
+      "outcome_power": "can change workloads",
+      "path_class": "posture-only",
+      "priority": "low",
+      "starting_foothold": "fox-operator (current foothold)",
+      "stronger_outcome": "stronger execution path if workload control is gained",
+      "subject_confidence": "direct",
+      "what_is_missing": "Current foothold control of that workload, its token path, or its service account is not proven.",
+      "what_is_proven": "Workload storefront/web-5d4f6 is already visible as a strong execution or identity lead.",
+      "why_care": "Lead stays visible because workload rises because it has a public-looking exposure path, can change workloads."
+    }
+  ],
+  "issues": [],
+  "metadata": {
+    "cluster_name": null,
+    "command": "privesc",
+    "context_name": "lab-cluster",
+    "docker_context": "default",
+    "generated_at": "<generated_at>",
+    "namespace": "default",
+    "schema_version": "1.0.0"
+  }
+}

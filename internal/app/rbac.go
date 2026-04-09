@@ -220,8 +220,12 @@ func providerDangerSignalScore(signal string) int {
 		return 50
 	case "bind roles", "escalate roles":
 		return 45
+	case "touch nodes":
+		return 40
 	case "change workloads", "exec into pods":
 		return 35
+	case "change admission or policy":
+		return 30
 	case "read secrets":
 		return 25
 	default:
