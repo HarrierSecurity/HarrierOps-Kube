@@ -40,6 +40,18 @@ var commandContracts = map[string]CommandContract{
 		Model:          "ExposureOutput",
 		TopLevelFields: []string{"metadata", "exposure_assets", "findings", "issues"},
 	},
+	"permissions": {
+		Model:          "PermissionsOutput",
+		TopLevelFields: []string{"metadata", "permissions", "issues"},
+	},
+	"secrets": {
+		Model:          "SecretsOutput",
+		TopLevelFields: []string{"metadata", "secret_paths", "issues"},
+	},
+	"privesc": {
+		Model:          "PrivescOutput",
+		TopLevelFields: []string{"metadata", "escalation_paths", "issues"},
+	},
 	"workloads": {
 		Model:          "WorkloadsOutput",
 		TopLevelFields: []string{"metadata", "workload_assets", "findings", "issues"},

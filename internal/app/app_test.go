@@ -36,7 +36,7 @@ func TestCLICommandsSmoke(t *testing.T) {
 			stderr := &bytes.Buffer{}
 
 			exitCode := Run(
-				[]string{"--outdir", outDir, "--output", "json", command},
+				[]string{command, "--outdir", outDir, "--output", "json"},
 				stdout,
 				stderr,
 				[]string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir},
@@ -60,7 +60,7 @@ func TestCLICommandsSmoke(t *testing.T) {
 	}
 }
 
-func TestCLIAllowsSharedFlagsAfterCommand(t *testing.T) {
+func TestCLIAllowsContextFlagAfterCommand(t *testing.T) {
 	fixtureDir := testFixtureDir(t)
 	outDir := t.TempDir()
 	stdout := &bytes.Buffer{}
@@ -89,14 +89,14 @@ func TestCLIAllowsSharedFlagsAfterCommand(t *testing.T) {
 	}
 }
 
-func TestCLIAllowsSharedFlagsOnEitherSideOfCommand(t *testing.T) {
+func TestCLIAllowsSharedFlagsAfterCommand(t *testing.T) {
 	fixtureDir := testFixtureDir(t)
 	outDir := t.TempDir()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
 	exitCode := Run(
-		[]string{"--context", "lab-cluster", "inventory", "--output", "json", "--outdir", outDir},
+		[]string{"inventory", "--context", "lab-cluster", "--output", "json", "--outdir", outDir},
 		stdout,
 		stderr,
 		[]string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir},
@@ -113,6 +113,29 @@ func TestCLIAllowsSharedFlagsOnEitherSideOfCommand(t *testing.T) {
 	}
 	if metadata["context_name"] != "lab-cluster" {
 		t.Fatalf("metadata.context_name = %v, want lab-cluster", metadata["context_name"])
+	}
+}
+
+func TestCLIRejectsFlagsBeforeCommand(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run(
+		[]string{"--context", "lab-cluster", "inventory"},
+		stdout,
+		stderr,
+		[]string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir},
+	)
+
+	if exitCode != 2 {
+		t.Fatalf("exit code = %d, want 2", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "command must come first") {
+		t.Fatalf("stderr = %q, want command-first guidance", stderr.String())
 	}
 }
 
@@ -208,9 +231,114 @@ func TestUsageTextReflectsCurrentSurface(t *testing.T) {
 		"planned phase 1 commands: none",
 		"later depth surfaces: images",
 		"implemented sections: identity, core, workload, exposure, secrets",
+		"harrierops-kube <command> help",
+		"run `harrierops-kube <command> help` for operator-readable command summaries",
 	} {
 		if !strings.Contains(usage, want) {
 			t.Fatalf("usage text missing %q in %q", want, usage)
+		}
+	}
+}
+
+func TestNoArgsShowDedicatedRootHelpSurface(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run(nil, stdout, stderr, nil)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"harrierops-kube help",
+		"harrierops-kube <command> help",
+		"implemented commands:",
+		"whoami",
+		"permissions",
+		"later depth surfaces:",
+		"images",
+		"`rbac` marks known built-in roles with `*`",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("help output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestCommandHelpShowsTopicAfterCommand(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"permissions", "help"}, stdout, stderr, nil)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"harrierops-kube permissions help",
+		"section: identity",
+		"status: implemented",
+		"meaning: Current-foothold capability triage that answers what this session can do next.",
+		"operator value:",
+		"security value:",
+		"why care:",
+		"best known current identity plus `(current session)`",
+		"An empty result means no visible grant matched the current session identity from current scope.",
+		"harrierops-kube permissions --output table",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("help topic output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestCommandHelpShowsLaterDepthTopic(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"images", "help"}, stdout, stderr, nil)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"harrierops-kube images help",
+		"status: later-depth",
+		"Workload-linked image triage",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("later-depth help output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestCommandHelpRejectsUnknownCommand(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"unknown-surface", "help"}, stdout, stderr, nil)
+	if exitCode != 2 {
+		t.Fatalf("exit code = %d, want 2", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	for _, want := range []string{
+		`unknown command "unknown-surface"`,
+		"usage: harrierops-kube <command> [global options]",
+		"implemented commands:",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr missing %q in %q", want, stderr.String())
 		}
 	}
 }
