@@ -188,7 +188,7 @@ var commandHelpTopics = map[string]commandHelpTopic{
 func rootHelpText() string {
 	var builder strings.Builder
 	builder.WriteString("harrierops-kube help\n\n")
-	builder.WriteString("Use Harrier Ops Kube to ground the current foothold, orient the cluster, and pull the next identity, workload, exposure, or secret path into view.\n\n")
+	builder.WriteString("Use HarrierOps Kube to ground the current foothold, orient the cluster, and pull the next identity, workload, exposure, or secret path into view.\n\n")
 	builder.WriteString("usage:\n")
 	builder.WriteString("  harrierops-kube <command> [global options]\n")
 	builder.WriteString("  harrierops-kube <command> help\n\n")
