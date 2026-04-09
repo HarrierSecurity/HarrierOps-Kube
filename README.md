@@ -1,80 +1,95 @@
 # Harrier Ops Kube
 
-Harrier Ops Kube tells you what your current Kubernetes foothold can actually do, what it can reach, and what matters next.
+Find attack paths, exposed workloads, and control-expansion opportunities in Kubernetes before you drown in objects.
 
-> Most Kubernetes tools give you objects.
-> Most inventory views tell you what exists.
-> Harrier Ops Kube tells you what your foothold means.
-> It prioritizes consequence, attack paths, and the next move.
+Most Kubernetes tools tell you what exists.
+Harrier Ops Kube tells you what the foothold you already have can actually do.
+Most Kubernetes tools dump objects and permissions.
+Harrier Ops Kube highlights which workloads, service accounts, token paths, and escalation leads matter first.
 
-## Why Run This First
+## Why This Matters
 
-Run this first when:
+You have:
 
-- you have a `kubeconfig` and need to know whether it lands near exposed workloads, meaningful
-  service accounts, or stronger control paths
-- you landed in a pod and need to know what identity, token, or host-level access that foothold
-  really carries
-- you found a service account or token reference and need to know whether it is just background
-  noise or the start of a real escalation path
+- a `kubeconfig`
+- a pod foothold
+- a service account or token clue
+- partial cluster visibility
 
-This is not the point where you want a generic object dump.
-This is the point where you want to know what your foothold changes right now.
+You need to answer quickly:
 
-## Fast Proof
+- What identity am I actually holding?
+- What can it reach or control right now?
+- Which workloads or services are exposed first?
+- Which service account, token, or secret path matters next?
+- Which path is most likely to become escalation or broader cluster control?
 
-In seconds, Harrier Ops Kube shows you:
+Harrier Ops Kube is built for that workflow.
 
-- what identity you are really running as
-- what cluster, namespace, and context you actually landed in
-- which workloads and services look exposed first
-- which service accounts and token paths matter
-- which visible paths look like real escalation or control expansion leads
+## Why This Is Different
 
-## Quickstart
+- Attack-path thinking, not inventory-first reporting
+- Foothold-first workflow, not isolated object output
+- Workload, service-account, and token consequence, not just raw Kubernetes listings
+- Operator guidance that points to the next path worth investigating
+- Broader than a foothold check: useful for movement, consequence, and follow-on access across the cluster
 
-Run the foothold, edge, workload, and escalation flow:
+## Core Capabilities
+
+- Show the current Kubernetes identity, context, namespace, and foothold shape you are operating from
+- Surface exposed services, ingress paths, and joined workloads that change the next move
+- Highlight service-account usage, token posture, and secret-bearing trust paths that deserve follow-up
+- Show the RBAC evidence and practical capability paths that matter for the current foothold
+- Expose escalation opportunities and likely next steps instead of leaving you to sort raw cluster data
+
+## Install
+
+Download the right binary for your platform from GitHub Releases and extract it.
+
+## Operator Workflow
+
+Start with the foothold you have, then work outward toward exposure, identity consequence, and control expansion:
 
 ```bash
 harrierops-kube whoami
 harrierops-kube inventory
 harrierops-kube exposure
 harrierops-kube workloads
+harrierops-kube service-accounts
 harrierops-kube privesc
 ```
 
-If identity and token paths matter more than the edge first:
-
-```bash
-harrierops-kube service-accounts
-```
+Typical flow:
+- `whoami`: confirm the current foothold, context, namespace, and identity confidence
+- `inventory`: determine what kind of cluster slice you actually landed in
+- `exposure` and `workloads`: identify which exposed paths and running workloads matter first
+- `service-accounts`: follow workload-linked identity and token paths toward the next useful pivot
+- `privesc`: surface direct abuse or escalation leads rooted in the current access
 
 ## Operator Outcome
 
 After one short pass, you understand:
+- which foothold matters
+- what access is real versus merely visible
+- where the best pivot or escalation opportunities are
+- which path deserves follow-up first
 
-- what your foothold really is
-- which workloads, identities, and exposed paths deserve attention first
-- whether there is a believable token, service-account, or escalation story nearby
-- where to go next without reading the whole cluster like a spreadsheet
-
-## What Makes This Different
-
-- Foothold-first: it starts from the access you already have, not from a generic cluster census.
-- Prioritized: it lifts the workloads, identities, and paths that change the next move.
-- Attack-path-aware: it keeps exposure, service accounts, tokens, and escalation in the same
-  operator workflow.
-- Not an object dump: it is built to reduce noise, not produce more of it.
+Harrier Ops Kube reduces noise by ranking consequence, not just returning Kubernetes objects.
 
 ## Use Cases
 
-- You have cluster access through a `kubeconfig` and need fast blast-radius triage.
-- You landed in a pod and need to understand the service account, token posture, and nearby risk.
-- You are validating how far a foothold, token, or service account could realistically go.
+- Triage a `kubeconfig`, pod foothold, or service account and determine what Kubernetes control it enables
+- Work outward from a workload, token, or exposed service to identify the next usable pivot path
+- Validate how far a foothold can realistically go before you spend time on lower-signal cluster detail
 
-## Install
+## Run It
 
-Download the right binary for your platform from GitHub Releases and extract it.
+Start with the current Kubernetes foothold and the strongest visible consequence:
+
+```bash
+harrierops-kube whoami
+harrierops-kube workloads
+```
 
 ## Currently Supported Commands
 
