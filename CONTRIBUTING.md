@@ -2,7 +2,7 @@
 
 ## Local Setup
 
-Harrier Ops Kube is a Go-first repo with fixture-backed command tests right now.
+HarrierOps Kube is a Go-first repo with fixture-backed command tests right now.
 
 ```bash
 bash scripts/setup_local_guardrails.sh

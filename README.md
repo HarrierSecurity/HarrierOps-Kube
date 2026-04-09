@@ -1,11 +1,11 @@
-# Harrier Ops Kube
+# HarrierOps Kube
 
 Find attack paths, exposed workloads, and control-expansion opportunities in Kubernetes before you drown in objects.
 
 Most Kubernetes tools tell you what exists.
-Harrier Ops Kube tells you what the foothold you already have can actually do.
+HarrierOps Kube tells you what the foothold you already have can actually do.
 Most Kubernetes tools dump objects and permissions.
-Harrier Ops Kube highlights which workloads, service accounts, token paths, and escalation leads matter first.
+HarrierOps Kube highlights which workloads, service accounts, token paths, and escalation leads matter first.
 
 ## Why This Matters
 
@@ -24,7 +24,7 @@ You need to answer quickly:
 - Which service account, token, or secret path matters next?
 - Which path is most likely to become escalation or broader cluster control?
 
-Harrier Ops Kube is built for that workflow.
+HarrierOps Kube is built for that workflow.
 
 ## Why This Is Different
 
@@ -74,7 +74,7 @@ After one short pass, you understand:
 - where the best pivot or escalation opportunities are
 - which path deserves follow-up first
 
-Harrier Ops Kube reduces noise by ranking consequence, not just returning Kubernetes objects.
+HarrierOps Kube reduces noise by ranking consequence, not just returning Kubernetes objects.
 
 ## Use Cases
 
@@ -107,7 +107,7 @@ Later depth surface:
 
 ## Kubernetes Access
 
-Harrier Ops Kube expects existing Kubernetes access.
+HarrierOps Kube expects existing Kubernetes access.
 It is not a login manager or a custom auth flow.
 
 The intended operator path is the Kubernetes access you already have:

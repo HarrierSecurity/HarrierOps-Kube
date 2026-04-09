@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Harrier Ops Kube is currently maintained on the latest main development line.
+HarrierOps Kube is currently maintained on the latest main development line.
 
 | Version | Supported |
 | --- | --- |
@@ -28,7 +28,7 @@ When reporting, please include:
 
 ## Scope Notes
 
-Harrier Ops Kube intentionally enumerates risky Kubernetes posture and attack-surface signals.
+HarrierOps Kube intentionally enumerates risky Kubernetes posture and attack-surface signals.
 Reports that a fixture, lab artifact, or intentionally documented proof environment contains
 insecure-by-design test posture are generally not treated as product vulnerabilities by themselves.
 
@@ -37,4 +37,4 @@ Useful security reports usually involve one of these:
 - accidental credential exposure in the repo or release artifacts
 - supply-chain or release-process weaknesses
 - output that overstates proof in a way that could mislead operators materially
-- code execution, unsafe file handling, or similar implementation flaws in Harrier Ops Kube itself
+- code execution, unsafe file handling, or similar implementation flaws in HarrierOps Kube itself

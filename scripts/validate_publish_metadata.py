@@ -34,7 +34,7 @@ def validate_pr_title(title: str) -> list[str]:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate local branch and PR metadata against Harrier Ops Kube publish rules."
+        description="Validate local branch and PR metadata against HarrierOps Kube publish rules."
     )
     parser.add_argument("--branch", help="Branch name to validate.")
     parser.add_argument("--pr-title", help="Pull request title to validate.")
