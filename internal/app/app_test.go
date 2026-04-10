@@ -349,7 +349,8 @@ func TestChainsHelpShowsRunnableFamilyTopic(t *testing.T) {
 		"internal proof ladder",
 		"kubernetes control",
 		"Live row wording stays evidence-bounded",
-		"Exact workload patch-surface rows stay suppressed until the family can defend them honestly.",
+		"Exact non-env workload patch-surface rows stay suppressed unless the family can tie the exact action edge and visible change surface to the same workload honestly.",
+		"Service-account repointing rows name one exact replacement only when current scope makes that target specific; otherwise the family keeps the lead broader.",
 		"harrierops-kube chains workload-identity-pivot --output table",
 	} {
 		if !strings.Contains(rendered, want) {
@@ -666,6 +667,236 @@ func TestBuildSelectedChainPayloadKeepsRunnableRowsWhenExposureSupportReadFails(
 	}
 	if !foundExposureIssue {
 		t.Fatalf("issues = %#v, want chains.exposure issue", issues)
+	}
+}
+
+func TestBuildSelectedChainPayloadBuildsExactEnvPatchRowWhenCurrentSessionCanPatchPods(t *testing.T) {
+	namespace := "default"
+	payload, err := buildSelectedChainPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			ClusterName: "lab-cluster",
+			Namespace:   namespace,
+		},
+		whoamiData: model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "fox-operator",
+				Kind:       "User",
+				Confidence: "direct",
+			},
+		},
+		workloadsData: model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{
+					ID:                 "pod:default:fox-admin",
+					Name:               "fox-admin",
+					Namespace:          namespace,
+					Kind:               "Pod",
+					ServiceAccountName: "fox-admin",
+					Images:             []string{"ghcr.io/example/fox-admin:latest"},
+					EnvNames:           []string{"TOKEN_PATH"},
+				},
+			},
+		},
+		serviceAccountsData: model.ServiceAccountsData{
+			ServiceAccounts: []model.ServiceAccount{
+				{
+					ID:        "serviceaccount:default:fox-admin",
+					Name:      "fox-admin",
+					Namespace: namespace,
+				},
+			},
+		},
+		rbacData: model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{
+					ID:             "grant:user:patch-pods",
+					BindingName:    "user-patch-pods",
+					Scope:          "namespace/default",
+					SubjectKind:    "User",
+					SubjectName:    "fox-operator",
+					EvidenceStatus: "direct",
+					WorkloadActions: []model.WorkloadAction{
+						{
+							Verb:            "patch",
+							TargetGroup:     "pods",
+							TargetResources: []string{"pods"},
+							Summary:         "can patch pods",
+						},
+					},
+				},
+				{
+					ID:               "grant:sa:cluster-admin",
+					BindingName:      "fox-admin-cluster-admin",
+					Scope:            "cluster-wide",
+					SubjectKind:      "ServiceAccount",
+					SubjectName:      "fox-admin",
+					SubjectNamespace: &namespace,
+					EvidenceStatus:   "direct",
+					DangerousRights:  []string{"admin-like wildcard access"},
+				},
+			},
+		},
+	}, provider.QueryOptions{}, "workload-identity-pivot")
+	if err != nil {
+		t.Fatalf("buildSelectedChainPayload() error = %v", err)
+	}
+
+	paths, ok := payload["paths"].([]any)
+	if !ok || len(paths) == 0 {
+		t.Fatalf("paths = %#v, want non-empty []any", payload["paths"])
+	}
+
+	found := false
+	for _, raw := range paths {
+		row := requireMap(t, raw)
+		if row["subversion_point"] != "patch env on workload default/fox-admin" {
+			continue
+		}
+		found = true
+		if row["path_type"] != "direct control visible" {
+			t.Fatalf("path_type = %v, want direct control visible", row["path_type"])
+		}
+		if row["visibility_tier"] != "high" {
+			t.Fatalf("visibility_tier = %v, want high", row["visibility_tier"])
+		}
+		if row["confidence_boundary"] != "Current scope confirms these workload fields are changeable: image, env, service account." {
+			t.Fatalf("confidence_boundary = %v", row["confidence_boundary"])
+		}
+	}
+	if !found {
+		t.Fatalf("paths = %#v, want exact env patch row", paths)
+	}
+}
+
+func TestBuildSelectedChainPayloadBuildsExactServiceAccountSwitchRowWhenOneStrongerCandidateIsVisible(t *testing.T) {
+	namespace := "default"
+	payload, err := buildSelectedChainPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			ClusterName: "lab-cluster",
+			Namespace:   namespace,
+		},
+		whoamiData: model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "fox-operator",
+				Kind:       "User",
+				Confidence: "direct",
+			},
+		},
+		workloadsData: model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{
+					ID:                 "pod:default:web",
+					Name:               "web",
+					Namespace:          namespace,
+					Kind:               "Pod",
+					ServiceAccountName: "web",
+					Images:             []string{"nginx:1.27"},
+				},
+				{
+					ID:                 "pod:default:fox-admin",
+					Name:               "fox-admin",
+					Namespace:          namespace,
+					Kind:               "Pod",
+					ServiceAccountName: "fox-admin",
+					Images:             []string{"ghcr.io/example/fox-admin:latest"},
+				},
+				{
+					ID:                 "pod:default:builder",
+					Name:               "builder",
+					Namespace:          namespace,
+					Kind:               "Pod",
+					ServiceAccountName: "builder",
+					Images:             []string{"ghcr.io/example/builder:latest"},
+				},
+			},
+		},
+		serviceAccountsData: model.ServiceAccountsData{
+			ServiceAccounts: []model.ServiceAccount{
+				{
+					ID:        "serviceaccount:default:web",
+					Name:      "web",
+					Namespace: namespace,
+				},
+				{
+					ID:        "serviceaccount:default:fox-admin",
+					Name:      "fox-admin",
+					Namespace: namespace,
+				},
+				{
+					ID:        "serviceaccount:default:builder",
+					Name:      "builder",
+					Namespace: namespace,
+				},
+			},
+		},
+		rbacData: model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{
+					ID:             "grant:user:patch-pods",
+					BindingName:    "user-patch-pods",
+					Scope:          "namespace/default",
+					SubjectKind:    "User",
+					SubjectName:    "fox-operator",
+					EvidenceStatus: "direct",
+					WorkloadActions: []model.WorkloadAction{
+						{
+							Verb:            "patch",
+							TargetGroup:     "pods",
+							TargetResources: []string{"pods"},
+							Summary:         "can patch pods",
+						},
+					},
+				},
+				{
+					ID:               "grant:sa:cluster-admin",
+					BindingName:      "fox-admin-cluster-admin",
+					Scope:            "cluster-wide",
+					SubjectKind:      "ServiceAccount",
+					SubjectName:      "fox-admin",
+					SubjectNamespace: &namespace,
+					EvidenceStatus:   "direct",
+					DangerousRights:  []string{"admin-like wildcard access"},
+				},
+				{
+					ID:               "grant:sa:builder-workloads",
+					BindingName:      "builder-workloads",
+					Scope:            "namespace/default",
+					SubjectKind:      "ServiceAccount",
+					SubjectName:      "builder",
+					SubjectNamespace: &namespace,
+					EvidenceStatus:   "direct",
+					DangerousRights:  []string{"change workloads"},
+				},
+			},
+		},
+	}, provider.QueryOptions{}, "workload-identity-pivot")
+	if err != nil {
+		t.Fatalf("buildSelectedChainPayload() error = %v", err)
+	}
+
+	paths, ok := payload["paths"].([]any)
+	if !ok || len(paths) == 0 {
+		t.Fatalf("paths = %#v, want non-empty []any", payload["paths"])
+	}
+
+	found := false
+	for _, raw := range paths {
+		row := requireMap(t, raw)
+		if row["path_type"] != "direct control visible" {
+			continue
+		}
+		if row["likely_kubernetes_control"] != "service account default/fox-admin has cluster-wide admin-like access" {
+			continue
+		}
+		found = true
+		if row["confidence_boundary"] != "Current scope confirms the workload service account field is changeable, and namespace default shows one visible replacement service account with stronger downstream control: default/fox-admin." {
+			t.Fatalf("confidence_boundary = %v", row["confidence_boundary"])
+		}
+	}
+	if !found {
+		t.Fatalf("paths = %#v, want exact service-account switch row", paths)
 	}
 }
 

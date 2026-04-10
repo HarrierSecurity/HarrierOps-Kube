@@ -3,6 +3,8 @@ package app
 import (
 	"fmt"
 	"strings"
+
+	"harrierops-kube/internal/chains"
 )
 
 type commandHelpTopic struct {
@@ -51,11 +53,7 @@ var commandHelpTopics = map[string]commandHelpTopic{
 			"path type guide separated from the internal proof ladder",
 			"backing source commands and current family gap",
 		},
-		Notes: []string{
-			"Use `harrierops-kube chains` for the overview and `harrierops-kube chains workload-identity-pivot` to run the first live family from current scope.",
-			"Live row wording stays evidence-bounded: it should show what is visible, what current foothold can do, and what still needs review.",
-			"Exact workload patch-surface rows stay suppressed until the family can defend them honestly.",
-		},
+		Notes:   chains.WorkloadIdentityPivotHelpNotes(),
 		Example: "harrierops-kube chains workload-identity-pivot --output table",
 	},
 	"inventory": {

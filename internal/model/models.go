@@ -176,6 +176,7 @@ type ServiceAccountPath struct {
 	EvidenceStatus       string   `json:"evidence_status"`
 	Priority             string   `json:"priority"`
 	PowerSummary         string   `json:"power_summary"`
+	PowerRank            int      `json:"-"`
 	TokenPosture         string   `json:"token_posture"`
 	WhyCare              string   `json:"why_care"`
 }

@@ -41,10 +41,82 @@ func TestEvaluateWorkloadIdentityDefaultRowAllowsTask12SafeDefaults(t *testing.T
 	}
 }
 
-func TestEvaluateWorkloadIdentityDefaultRowKeepsPatchSpecificRowsOutByDefault(t *testing.T) {
+func TestEvaluateWorkloadIdentityDefaultRowAllowsExactEnvPatchRowsOnceAllGatesAreMet(t *testing.T) {
+	got := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+		Kind:                        WorkloadIdentityRowPatchSpecificSurface,
+		ExactActionProven:           true,
+		VisibleSurface:              "env",
+		VisibilityTier:              "high",
+		ConfidenceBoundaryAvailable: true,
+	})
+	if !got.AllowedDefault {
+		t.Fatalf("AllowedDefault = false, want true: %s", got.Reason)
+	}
+	if got.SuppressDefault {
+		t.Fatalf("SuppressDefault = true, want false: %s", got.Reason)
+	}
+}
+
+func TestEvaluateWorkloadIdentityDefaultRowKeepsPatchSpecificRowsOutUntilEligibilityIsHonest(t *testing.T) {
+	testCases := []struct {
+		name   string
+		inputs WorkloadIdentityDefaultRowInputs
+	}{
+		{
+			name: "missing exact action",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowPatchSpecificSurface,
+				VisibleSurface:              "env",
+				VisibilityTier:              "high",
+				ConfidenceBoundaryAvailable: true,
+			},
+		},
+		{
+			name: "unsafe surface",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowPatchSpecificSurface,
+				ExactActionProven:           true,
+				VisibleSurface:              "service account",
+				VisibilityTier:              "high",
+				ConfidenceBoundaryAvailable: true,
+			},
+		},
+		{
+			name: "thin visibility",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowPatchSpecificSurface,
+				ExactActionProven:           true,
+				VisibleSurface:              "env",
+				VisibilityTier:              "low",
+				ConfidenceBoundaryAvailable: true,
+			},
+		},
+		{
+			name: "missing confidence boundary",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:              WorkloadIdentityRowPatchSpecificSurface,
+				ExactActionProven: true,
+				VisibleSurface:    "env",
+				VisibilityTier:    "high",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := EvaluateWorkloadIdentityDefaultRow(tc.inputs)
+			if got.AllowedDefault {
+				t.Fatalf("AllowedDefault = true, want false for %s", tc.name)
+			}
+			if !got.SuppressDefault {
+				t.Fatalf("SuppressDefault = false, want true for %s", tc.name)
+			}
+		})
+	}
+}
+
+func TestEvaluateWorkloadIdentityDefaultRowKeepsRiskierRowsOutByDefault(t *testing.T) {
 	for _, kind := range []WorkloadIdentityRowKind{
-		WorkloadIdentityRowPatchSpecificSurface,
-		WorkloadIdentityRowSwitchServiceAccount,
 		WorkloadIdentityRowAddSidecar,
 	} {
 		t.Run(string(kind), func(t *testing.T) {
@@ -54,6 +126,112 @@ func TestEvaluateWorkloadIdentityDefaultRowKeepsPatchSpecificRowsOutByDefault(t 
 			}
 			if !got.SuppressDefault {
 				t.Fatalf("SuppressDefault = false for %q, want true", kind)
+			}
+		})
+	}
+}
+
+func TestEvaluateWorkloadIdentityDefaultRowAllowsExactServiceAccountSwitchRowsOnceAllGatesAreMet(t *testing.T) {
+	got := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+		Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+		ExactActionProven:           true,
+		VisibleSurface:              "service account",
+		VisibilityTier:              "high",
+		ConfidenceBoundaryAvailable: true,
+		ExactTargetNamed:            true,
+	})
+	if !got.AllowedDefault {
+		t.Fatalf("AllowedDefault = false, want true: %s", got.Reason)
+	}
+	if got.SuppressDefault {
+		t.Fatalf("SuppressDefault = true, want false: %s", got.Reason)
+	}
+}
+
+func TestEvaluateWorkloadIdentityDefaultRowAllowsBoundedServiceAccountFallbackRows(t *testing.T) {
+	got := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+		Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+		ExactActionProven:           true,
+		VisibleSurface:              "service account",
+		VisibilityTier:              "high",
+		ConfidenceBoundaryAvailable: true,
+		WeakerFallbackAvailable:     true,
+	})
+	if !got.AllowedDefault {
+		t.Fatalf("AllowedDefault = false, want true: %s", got.Reason)
+	}
+	if got.SuppressDefault {
+		t.Fatalf("SuppressDefault = true, want false: %s", got.Reason)
+	}
+}
+
+func TestEvaluateWorkloadIdentityDefaultRowKeepsServiceAccountSwitchRowsOutUntilEligibilityIsHonest(t *testing.T) {
+	testCases := []struct {
+		name   string
+		inputs WorkloadIdentityDefaultRowInputs
+	}{
+		{
+			name: "missing exact action",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+				VisibleSurface:              "service account",
+				VisibilityTier:              "high",
+				ConfidenceBoundaryAvailable: true,
+				ExactTargetNamed:            true,
+			},
+		},
+		{
+			name: "wrong visible surface",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+				ExactActionProven:           true,
+				VisibleSurface:              "env",
+				VisibilityTier:              "high",
+				ConfidenceBoundaryAvailable: true,
+				ExactTargetNamed:            true,
+			},
+		},
+		{
+			name: "thin visibility",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+				ExactActionProven:           true,
+				VisibleSurface:              "service account",
+				VisibilityTier:              "low",
+				ConfidenceBoundaryAvailable: true,
+				ExactTargetNamed:            true,
+			},
+		},
+		{
+			name: "missing confidence boundary",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:              WorkloadIdentityRowSwitchServiceAccount,
+				ExactActionProven: true,
+				VisibleSurface:    "service account",
+				VisibilityTier:    "high",
+				ExactTargetNamed:  true,
+			},
+		},
+		{
+			name: "no exact target and no bounded fallback",
+			inputs: WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+				ExactActionProven:           true,
+				VisibleSurface:              "service account",
+				VisibilityTier:              "high",
+				ConfidenceBoundaryAvailable: true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := EvaluateWorkloadIdentityDefaultRow(tc.inputs)
+			if got.AllowedDefault {
+				t.Fatalf("AllowedDefault = true, want false for %s", tc.name)
+			}
+			if !got.SuppressDefault {
+				t.Fatalf("SuppressDefault = false, want true for %s", tc.name)
 			}
 		})
 	}

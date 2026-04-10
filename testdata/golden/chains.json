@@ -9,7 +9,7 @@
         "workloads -> service-accounts -> privesc",
         "secrets -> workloads -> service-accounts"
       ],
-      "current_gap": "The first runnable family now emits the bounded default row set, but exact patch-surface rows and stronger service-account swap rows still need follow-on eligibility work.",
+      "current_gap": "The first runnable family now emits the bounded default row set, can add exact env-patch rows, and can surface service-account repointing as either one named stronger target or a bounded broader lead when exact target selection would overclaim; sidecar-specific rows still need follow-on eligibility work.",
       "family": "workload-identity-pivot",
       "internal_proof_ladder": [
         {

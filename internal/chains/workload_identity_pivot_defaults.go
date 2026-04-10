@@ -12,8 +12,14 @@ const (
 )
 
 type WorkloadIdentityDefaultRowInputs struct {
-	Kind                    WorkloadIdentityRowKind
-	RuntimeInspectionProven bool
+	Kind                        WorkloadIdentityRowKind
+	RuntimeInspectionProven     bool
+	ExactActionProven           bool
+	VisibleSurface              string
+	VisibilityTier              string
+	ConfidenceBoundaryAvailable bool
+	ExactTargetNamed            bool
+	WeakerFallbackAvailable     bool
 }
 
 type WorkloadIdentityDefaultRowDecision struct {
@@ -58,16 +64,86 @@ func EvaluateWorkloadIdentityDefaultRow(inputs WorkloadIdentityDefaultRowInputs)
 			Reason:          "Safe earliest default: current scope can report visible workload-linked token path without overstating runtime inspection.",
 		}
 	case WorkloadIdentityRowPatchSpecificSurface:
+		if !inputs.ExactActionProven {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the family can prove the exact workload-changing edge for this row.",
+			}
+		}
+		if !eligibleWorkloadPatchSurface(inputs.VisibleSurface) {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the family can name an exact visible patch surface that is safe for this row type.",
+			}
+		}
+		if inputs.VisibilityTier == "" || inputs.VisibilityTier == "low" {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until visibility is strong enough that the exact patch row will not mislead.",
+			}
+		}
+		if !inputs.ConfidenceBoundaryAvailable {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the row can state a positive evidence boundary.",
+			}
+		}
 		return WorkloadIdentityDefaultRowDecision{
-			AllowedDefault:  false,
-			SuppressDefault: true,
-			Reason:          "Keep out of default output until the family can prove the exact patchable field honestly.",
+			AllowedDefault:  true,
+			SuppressDefault: false,
+			Reason:          "Safe exact-field default: current scope proves the workload-changing edge, the visible surface, and a positive confidence boundary on the same workload row.",
 		}
 	case WorkloadIdentityRowSwitchServiceAccount:
+		if !inputs.ExactActionProven {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the family can prove the exact workload-changing edge for service-account repointing.",
+			}
+		}
+		if inputs.VisibleSurface != "service account" {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the family can tie this row to the visible workload service-account field.",
+			}
+		}
+		if inputs.VisibilityTier == "" || inputs.VisibilityTier == "low" {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until visibility is strong enough that the repointing row will not mislead.",
+			}
+		}
+		if !inputs.ConfidenceBoundaryAvailable {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the row can state a positive evidence boundary.",
+			}
+		}
+		if inputs.ExactTargetNamed {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  true,
+				SuppressDefault: false,
+				Reason:          "Safe exact-target default: current scope proves the service-account field is changeable and one stronger visible replacement is specific enough to name.",
+			}
+		}
+		if inputs.WeakerFallbackAvailable {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  true,
+				SuppressDefault: false,
+				Reason:          "Safe family fallback: current scope proves the service-account field is changeable and stronger visible identity paths exist, but exact target selection would overclaim.",
+			}
+		}
 		return WorkloadIdentityDefaultRowDecision{
 			AllowedDefault:  false,
 			SuppressDefault: true,
-			Reason:          "Keep out of default output until the family can prove service-account switching as a real operator-complete path.",
+			Reason:          "Keep out of default output until the family can either name one honest stronger target or keep the lead broader without misleading the operator.",
 		}
 	case WorkloadIdentityRowAddSidecar:
 		return WorkloadIdentityDefaultRowDecision{
@@ -81,5 +157,15 @@ func EvaluateWorkloadIdentityDefaultRow(inputs WorkloadIdentityDefaultRowInputs)
 			SuppressDefault: true,
 			Reason:          "Not part of the minimum honest first row set yet.",
 		}
+	}
+}
+
+func eligibleWorkloadPatchSurface(surface string) bool {
+	// V1 exact patch rows are intentionally env-only even though the workload model carries more visible surfaces.
+	switch surface {
+	case "env":
+		return true
+	default:
+		return false
 	}
 }

@@ -83,6 +83,8 @@ func buildWorkloadIdentityPivotRows(inputs WorkloadIdentityPivotInputs) []model.
 	rows := []model.ChainPathRecord{}
 	rows = append(rows, buildExecIntoPodsRows(inputs, workloadByNamespace, serviceAccountByKey)...)
 	rows = append(rows, buildReadSecretsRows(inputs, workloadByLabel, serviceAccountByKey)...)
+	rows = append(rows, buildSwitchServiceAccountRows(inputs, workloadByNamespace, serviceAccountByKey)...)
+	rows = append(rows, buildPatchSpecificSurfaceRows(inputs, workloadByNamespace, serviceAccountByKey)...)
 	rows = append(rows, buildTokenPathVisibleRows(inputs, workloadByLabel, serviceAccountByKey)...)
 	return rows
 }
@@ -291,6 +293,217 @@ func buildTokenPathVisibleRows(
 	return rows
 }
 
+func buildPatchSpecificSurfaceRows(
+	inputs WorkloadIdentityPivotInputs,
+	workloadByNamespace map[string][]model.WorkloadPath,
+	serviceAccountByKey map[string]model.ServiceAccountPath,
+) []model.ChainPathRecord {
+	bestPatchPermissionByNamespace := map[string]model.PermissionPath{}
+	for _, permission := range inputs.Permissions {
+		namespace, ok := namespaceScope(permission.Scope)
+		if !ok {
+			continue
+		}
+		if !permissionSupportsExactWorkloadPatchSurface(permission) {
+			continue
+		}
+
+		best, seen := bestPatchPermissionByNamespace[namespace]
+		if !seen || exactPatchSurfacePermissionScore(permission) > exactPatchSurfacePermissionScore(best) {
+			bestPatchPermissionByNamespace[namespace] = permission
+		}
+	}
+
+	rows := []model.ChainPathRecord{}
+	for namespace, permission := range bestPatchPermissionByNamespace {
+		workload, serviceAccount, ok := strongestWorkloadForPatchSurface(namespace, "env", workloadByNamespace, serviceAccountByKey)
+		if !ok {
+			continue
+		}
+
+		visibility, ok := ClassifyWorkloadIdentityVisibility(WorkloadIdentityVisibilityInputs{
+			WorkloadVisible:         true,
+			SubversionPointVisible:  true,
+			AttachedIdentityVisible: workload.ServiceAccountName != "",
+			StrongerControlVisible:  serviceAccount.PowerSummary != "",
+			VisibleChangeSurfaces:   true,
+			ExactBlockerKnown:       true,
+			NextReviewSet:           true,
+		})
+		if !ok {
+			continue
+		}
+
+		confidenceBoundary, boundaryOK := FormatWorkloadPatchConfidenceBoundary(workload.VisiblePatchSurfaces)
+		decision := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+			Kind:                        WorkloadIdentityRowPatchSpecificSurface,
+			ExactActionProven:           true,
+			VisibleSurface:              "env",
+			VisibilityTier:              visibility.Tier,
+			ConfidenceBoundaryAvailable: boundaryOK,
+		})
+		if !decision.AllowedDefault || visibility.SuppressDefault {
+			continue
+		}
+
+		rows = append(rows, model.ChainPathRecord{
+			ChainID:                 "workload-identity-pivot:patch-env:" + namespace + ":" + workload.Name,
+			Priority:                workload.Priority,
+			InternalProofState:      "path-confirmed",
+			VisibilityTier:          visibility.Tier,
+			PathType:                "direct control visible",
+			StartingFoothold:        inputs.StartingFoothold,
+			SourceAsset:             workload.Namespace + "/" + workload.Name,
+			SourceNamespace:         workload.Namespace,
+			SubversionPoint:         exactPatchSurfaceSubversionPoint(permission.ActionVerb, workload.Namespace+"/"+workload.Name, "env"),
+			LikelyKubernetesControl: "attached service account " + serviceAccount.PowerSummary,
+			Urgency:                 "now",
+			WhyStopHere:             WorkloadPatchWhyStopHere(),
+			ConfidenceBoundary:      confidenceBoundary,
+			NextReview:              "workloads",
+			Summary:                 visibility.OperatorWording,
+			EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
+			RelatedIDs:              []string{permission.ID, workload.ID, serviceAccount.ID},
+		})
+	}
+
+	return rows
+}
+
+func buildSwitchServiceAccountRows(
+	inputs WorkloadIdentityPivotInputs,
+	workloadByNamespace map[string][]model.WorkloadPath,
+	serviceAccountByKey map[string]model.ServiceAccountPath,
+) []model.ChainPathRecord {
+	bestPermissionByNamespace := map[string]model.PermissionPath{}
+	for _, permission := range inputs.Permissions {
+		namespace, ok := namespaceScope(permission.Scope)
+		if !ok {
+			continue
+		}
+		if !permissionSupportsServiceAccountRepointing(permission) {
+			continue
+		}
+
+		best, seen := bestPermissionByNamespace[namespace]
+		if !seen || exactPatchSurfacePermissionScore(permission) > exactPatchSurfacePermissionScore(best) {
+			bestPermissionByNamespace[namespace] = permission
+		}
+	}
+
+	rows := []model.ChainPathRecord{}
+	for namespace, permission := range bestPermissionByNamespace {
+		option, ok := strongestWorkloadForServiceAccountSwitch(permission, namespace, workloadByNamespace, serviceAccountByKey)
+		if !ok {
+			continue
+		}
+
+		visibility, ok := ClassifyWorkloadIdentityVisibility(WorkloadIdentityVisibilityInputs{
+			WorkloadVisible:         true,
+			SubversionPointVisible:  true,
+			AttachedIdentityVisible: option.Workload.ServiceAccountName != "",
+			StrongerControlVisible:  len(option.StrongerCandidates) > 0,
+			VisibleChangeSurfaces:   true,
+			ExactBlockerKnown:       true,
+			NextReviewSet:           true,
+		})
+		if !ok {
+			continue
+		}
+
+		if option.ExactCandidate != nil {
+			target := *option.ExactCandidate
+			confidenceBoundary, boundaryOK := FormatExactServiceAccountSwitchConfidenceBoundary(
+				namespace,
+				namespacedServiceAccountLabel(target.Namespace, target.Name),
+			)
+			decision := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+				ExactActionProven:           true,
+				VisibleSurface:              "service account",
+				VisibilityTier:              visibility.Tier,
+				ConfidenceBoundaryAvailable: boundaryOK,
+				ExactTargetNamed:            true,
+			})
+			if decision.AllowedDefault && !visibility.SuppressDefault {
+				relatedIDs := []string{permission.ID, option.Workload.ID}
+				if option.CurrentServiceAccount.ID != "" {
+					relatedIDs = append(relatedIDs, option.CurrentServiceAccount.ID)
+				}
+				relatedIDs = append(relatedIDs, target.ID)
+
+				rows = append(rows, buildServiceAccountSwitchRecord(serviceAccountSwitchRecordInputs{
+					ChainID:                 "workload-identity-pivot:switch-service-account:" + namespace + ":" + option.Workload.Name + ":" + target.Name,
+					Priority:                option.Workload.Priority,
+					InternalProofState:      "path-confirmed",
+					VisibilityTier:          visibility.Tier,
+					PathType:                "direct control visible",
+					StartingFoothold:        inputs.StartingFoothold,
+					SourceAsset:             option.Workload.Namespace + "/" + option.Workload.Name,
+					SourceNamespace:         option.Workload.Namespace,
+					SubversionPoint:         "switch workload " + option.Workload.Namespace + "/" + option.Workload.Name + " to service account " + target.Namespace + "/" + target.Name,
+					LikelyKubernetesControl: "service account " + target.Namespace + "/" + target.Name + " " + target.PowerSummary,
+					Urgency:                 "now",
+					WhyStopHere:             workloadServiceAccountSwitchWhyStopHere,
+					ConfidenceBoundary:      confidenceBoundary,
+					NextReview:              "service-accounts",
+					Summary:                 visibility.OperatorWording,
+					EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
+					RelatedIDs:              relatedIDs,
+				}))
+				continue
+			}
+		}
+
+		confidenceBoundary, boundaryOK := FormatBoundedServiceAccountSwitchConfidenceBoundary(
+			namespace,
+			namespacedServiceAccountLabel(namespace, option.Workload.ServiceAccountName),
+		)
+		decision := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+			Kind:                        WorkloadIdentityRowSwitchServiceAccount,
+			ExactActionProven:           true,
+			VisibleSurface:              "service account",
+			VisibilityTier:              visibility.Tier,
+			ConfidenceBoundaryAvailable: boundaryOK,
+			WeakerFallbackAvailable:     len(option.StrongerCandidates) > 0,
+		})
+		if !decision.AllowedDefault || visibility.SuppressDefault {
+			continue
+		}
+
+		relatedIDs := []string{permission.ID, option.Workload.ID}
+		if option.CurrentServiceAccount.ID != "" {
+			relatedIDs = append(relatedIDs, option.CurrentServiceAccount.ID)
+		}
+		for _, candidate := range option.StrongerCandidates {
+			relatedIDs = append(relatedIDs, candidate.ID)
+		}
+
+		rows = append(rows, buildServiceAccountSwitchRecord(serviceAccountSwitchRecordInputs{
+			ChainID:                 "workload-identity-pivot:review-switch-service-account:" + namespace + ":" + option.Workload.Name,
+			Priority:                option.Workload.Priority,
+			InternalProofState:      "visible",
+			VisibilityTier:          visibility.Tier,
+			PathType:                "workload pivot",
+			StartingFoothold:        inputs.StartingFoothold,
+			SourceAsset:             option.Workload.Namespace + "/" + option.Workload.Name,
+			SourceNamespace:         option.Workload.Namespace,
+			SubversionPoint:         "review stronger service-account repointing on workload " + option.Workload.Namespace + "/" + option.Workload.Name,
+			LikelyKubernetesControl: boundedServiceAccountControlSummary(option.StrongerCandidates),
+			Urgency:                 "soon",
+			WhyStopHere:             workloadServiceAccountFallbackWhyStopHere,
+			ConfidenceBoundary:      confidenceBoundary,
+			NextReview:              "service-accounts",
+			Summary:                 visibility.OperatorWording,
+			MissingConfirmation:     "Current scope does not justify naming one exact replacement service account yet.",
+			EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
+			RelatedIDs:              relatedIDs,
+		}))
+	}
+
+	return rows
+}
+
 func strongestWorkloadForScope(
 	namespace string,
 	workloadByNamespace map[string][]model.WorkloadPath,
@@ -388,6 +601,322 @@ func strongestTokenSecretIDForWorkload(workloadLabel string, secrets []model.Sec
 		}
 	}
 	return "", false
+}
+
+func strongestWorkloadForPatchSurface(
+	namespace string,
+	surface string,
+	workloadByNamespace map[string][]model.WorkloadPath,
+	serviceAccountByKey map[string]model.ServiceAccountPath,
+) (model.WorkloadPath, model.ServiceAccountPath, bool) {
+	workloads := workloadByNamespace[namespace]
+	bestIndex := -1
+	bestScore := -1
+	var bestServiceAccount model.ServiceAccountPath
+
+	for index, workload := range workloads {
+		if workload.Kind != "Pod" {
+			continue
+		}
+		if !workloadHasVisiblePatchSurface(workload, surface) {
+			continue
+		}
+
+		serviceAccount := serviceAccountByKey[workload.Namespace+"/"+workload.ServiceAccountName]
+		if serviceAccount.PowerSummary == "" {
+			continue
+		}
+
+		score := triageScore(workload.Priority)
+		if workload.PublicExposure {
+			score += 10
+		}
+		if len(workload.RiskSignals) > 0 {
+			score += 5
+		}
+		if score > bestScore {
+			bestScore = score
+			bestIndex = index
+			bestServiceAccount = serviceAccount
+		}
+	}
+
+	if bestIndex == -1 {
+		return model.WorkloadPath{}, model.ServiceAccountPath{}, false
+	}
+	return workloads[bestIndex], bestServiceAccount, true
+}
+
+type serviceAccountSwitchOption struct {
+	Workload              model.WorkloadPath
+	CurrentServiceAccount model.ServiceAccountPath
+	StrongerCandidates    []model.ServiceAccountPath
+	ExactCandidate        *model.ServiceAccountPath
+}
+
+type serviceAccountSwitchRecordInputs struct {
+	ChainID                 string
+	Priority                string
+	InternalProofState      string
+	VisibilityTier          string
+	PathType                string
+	StartingFoothold        string
+	SourceAsset             string
+	SourceNamespace         string
+	SubversionPoint         string
+	LikelyKubernetesControl string
+	Urgency                 string
+	WhyStopHere             string
+	ConfidenceBoundary      string
+	NextReview              string
+	Summary                 string
+	MissingConfirmation     string
+	EvidenceCommands        []string
+	RelatedIDs              []string
+}
+
+func buildServiceAccountSwitchRecord(inputs serviceAccountSwitchRecordInputs) model.ChainPathRecord {
+	return model.ChainPathRecord{
+		ChainID:                 inputs.ChainID,
+		Priority:                inputs.Priority,
+		InternalProofState:      inputs.InternalProofState,
+		VisibilityTier:          inputs.VisibilityTier,
+		PathType:                inputs.PathType,
+		StartingFoothold:        inputs.StartingFoothold,
+		SourceAsset:             inputs.SourceAsset,
+		SourceNamespace:         inputs.SourceNamespace,
+		SubversionPoint:         inputs.SubversionPoint,
+		LikelyKubernetesControl: inputs.LikelyKubernetesControl,
+		Urgency:                 inputs.Urgency,
+		WhyStopHere:             inputs.WhyStopHere,
+		ConfidenceBoundary:      inputs.ConfidenceBoundary,
+		NextReview:              inputs.NextReview,
+		Summary:                 inputs.Summary,
+		MissingConfirmation:     inputs.MissingConfirmation,
+		EvidenceCommands:        append([]string(nil), inputs.EvidenceCommands...),
+		RelatedIDs:              append([]string(nil), inputs.RelatedIDs...),
+	}
+}
+
+func strongestWorkloadForServiceAccountSwitch(
+	permission model.PermissionPath,
+	namespace string,
+	workloadByNamespace map[string][]model.WorkloadPath,
+	serviceAccountByKey map[string]model.ServiceAccountPath,
+) (serviceAccountSwitchOption, bool) {
+	workloads := workloadByNamespace[namespace]
+	bestIndex := -1
+	bestScore := -1
+	var bestCurrent model.ServiceAccountPath
+	var bestCandidates []model.ServiceAccountPath
+
+	for index, workload := range workloads {
+		if !permissionAppliesToServiceAccountSwitchWorkload(permission, workload) {
+			continue
+		}
+		if !workloadHasVisiblePatchSurface(workload, "service account") {
+			continue
+		}
+
+		current := serviceAccountByKey[workload.Namespace+"/"+workload.ServiceAccountName]
+		candidates := strongerVisibleServiceAccountCandidates(workload, workloads, serviceAccountByKey)
+		if len(candidates) == 0 {
+			continue
+		}
+
+		score := triageScore(workload.Priority) + candidates[0].PowerRank
+		if workload.PublicExposure {
+			score += 10
+		}
+		if len(workload.RiskSignals) > 0 {
+			score += 5
+		}
+
+		if score > bestScore {
+			bestIndex = index
+			bestScore = score
+			bestCurrent = current
+			bestCandidates = candidates
+		}
+	}
+
+	if bestIndex == -1 {
+		return serviceAccountSwitchOption{}, false
+	}
+
+	return serviceAccountSwitchOption{
+		Workload:              workloads[bestIndex],
+		CurrentServiceAccount: bestCurrent,
+		StrongerCandidates:    append([]model.ServiceAccountPath(nil), bestCandidates...),
+		ExactCandidate:        uniqueStrongestServiceAccountCandidate(bestCandidates),
+	}, true
+}
+
+func uniqueStrongestServiceAccountCandidate(candidates []model.ServiceAccountPath) *model.ServiceAccountPath {
+	if len(candidates) == 0 {
+		return nil
+	}
+	if len(candidates) == 1 {
+		candidate := candidates[0]
+		return &candidate
+	}
+
+	topRank := candidates[0].PowerRank
+	topCount := 0
+	var chosen model.ServiceAccountPath
+	for _, candidate := range candidates {
+		if candidate.PowerRank != topRank {
+			break
+		}
+		topCount++
+		chosen = candidate
+	}
+	if topCount != 1 {
+		return nil
+	}
+	return &chosen
+}
+
+func permissionAppliesToServiceAccountSwitchWorkload(permission model.PermissionPath, workload model.WorkloadPath) bool {
+	switch permission.TargetGroup {
+	case "pods":
+		return workload.Kind == "Pod"
+	case "workload-controllers":
+		return workload.Kind != "" && workload.Kind != "Pod"
+	default:
+		return false
+	}
+}
+
+func strongerVisibleServiceAccountCandidates(
+	workload model.WorkloadPath,
+	workloads []model.WorkloadPath,
+	serviceAccountByKey map[string]model.ServiceAccountPath,
+) []model.ServiceAccountPath {
+	current := serviceAccountByKey[workload.Namespace+"/"+workload.ServiceAccountName]
+	candidates := []model.ServiceAccountPath{}
+	seen := map[string]bool{}
+
+	for _, candidateWorkload := range workloads {
+		candidate := serviceAccountByKey[candidateWorkload.Namespace+"/"+candidateWorkload.ServiceAccountName]
+		if candidate.Namespace != workload.Namespace || candidate.Name == "" {
+			continue
+		}
+		if candidate.Name == workload.ServiceAccountName {
+			continue
+		}
+		if candidate.PowerSummary == "" || candidate.EvidenceStatus != "direct" {
+			continue
+		}
+		if candidate.PowerRank <= current.PowerRank {
+			continue
+		}
+
+		key := candidate.Namespace + "/" + candidate.Name
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		candidates = append(candidates, candidate)
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		leftScore := candidates[i].PowerRank
+		rightScore := candidates[j].PowerRank
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
+		if chainPriorityOrder(candidates[i].Priority) != chainPriorityOrder(candidates[j].Priority) {
+			return chainPriorityOrder(candidates[i].Priority) < chainPriorityOrder(candidates[j].Priority)
+		}
+		if candidates[i].Namespace != candidates[j].Namespace {
+			return candidates[i].Namespace < candidates[j].Namespace
+		}
+		return candidates[i].Name < candidates[j].Name
+	})
+	return candidates
+}
+
+func permissionSupportsExactWorkloadPatchSurface(permission model.PermissionPath) bool {
+	if permission.TargetGroup != "pods" {
+		return false
+	}
+	switch permission.ActionVerb {
+	case "patch", "update":
+		return true
+	default:
+		return false
+	}
+}
+
+func permissionSupportsServiceAccountRepointing(permission model.PermissionPath) bool {
+	switch permission.TargetGroup {
+	case "pods", "workload-controllers":
+	default:
+		return false
+	}
+	switch permission.ActionVerb {
+	case "patch", "update":
+		return true
+	default:
+		return false
+	}
+}
+
+func exactPatchSurfacePermissionScore(permission model.PermissionPath) int {
+	switch permission.ActionVerb {
+	case "patch":
+		return 2
+	case "update":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func workloadHasVisiblePatchSurface(workload model.WorkloadPath, surface string) bool {
+	for _, visibleSurface := range workload.VisiblePatchSurfaces {
+		if visibleSurface == surface {
+			return true
+		}
+	}
+	return false
+}
+
+func exactPatchSurfaceSubversionPoint(actionVerb string, workloadLabel string, surface string) string {
+	switch actionVerb {
+	case "update":
+		return "update " + surface + " on workload " + workloadLabel
+	default:
+		return "patch " + surface + " on workload " + workloadLabel
+	}
+}
+
+func namespacedServiceAccountLabel(namespace string, name string) string {
+	if namespace == "" || name == "" {
+		return ""
+	}
+	return namespace + "/" + name
+}
+
+func boundedServiceAccountControlSummary(candidates []model.ServiceAccountPath) string {
+	if len(candidates) == 0 {
+		return "stronger visible service-account paths are present in this namespace"
+	}
+
+	summaries := make([]string, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate.PowerSummary == "" || seen[candidate.PowerSummary] {
+			continue
+		}
+		seen[candidate.PowerSummary] = true
+		summaries = append(summaries, candidate.PowerSummary)
+	}
+	if len(summaries) == 0 {
+		return "stronger visible service-account paths are present in this namespace"
+	}
+	return "visible replacement identities include " + strings.Join(summaries, ", ")
 }
 
 func triageScore(priority string) int {

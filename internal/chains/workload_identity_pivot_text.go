@@ -3,6 +3,8 @@ package chains
 import "strings"
 
 const workloadPatchWhyStopHere = "current foothold can change an already running workload with stronger identity"
+const workloadServiceAccountSwitchWhyStopHere = "current foothold can repoint an already running workload toward a stronger visible identity"
+const workloadServiceAccountFallbackWhyStopHere = "current foothold can change the workload identity path, but exact replacement target still needs bounded follow-up"
 
 var workloadPatchSurfaceOrder = []string{
 	"image",
@@ -48,4 +50,21 @@ func orderedVisiblePatchSurfaces(visiblePatchSurfaces []string) []string {
 		}
 	}
 	return ordered
+}
+
+func FormatExactServiceAccountSwitchConfidenceBoundary(namespace string, targetLabel string) (string, bool) {
+	if namespace == "" || targetLabel == "" {
+		return "", false
+	}
+	return "Current scope confirms the workload service account field is changeable, and namespace " + namespace + " shows one visible replacement service account with stronger downstream control: " + targetLabel + ".", true
+}
+
+func FormatBoundedServiceAccountSwitchConfidenceBoundary(namespace string, currentLabel string) (string, bool) {
+	if namespace == "" {
+		return "", false
+	}
+	if currentLabel == "" {
+		return "Current scope confirms the workload service account field is changeable, and stronger visible service-account paths exist in namespace " + namespace + ".", true
+	}
+	return "Current scope confirms the workload service account field is changeable, and stronger visible service-account paths exist in namespace " + namespace + " beyond " + currentLabel + ".", true
 }

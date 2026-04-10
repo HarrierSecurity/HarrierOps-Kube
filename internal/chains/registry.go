@@ -40,7 +40,7 @@ var familySpecs = []FamilySpec{
 		Meaning:      "A current foothold can likely influence a workload or workload-linked service account that already carries stronger downstream control.",
 		Summary:      "Follow the shortest visible workload-to-identity pivot toward stronger service-account-backed Kubernetes control.",
 		AllowedClaim: "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, or stronger control without the explicit control edge and confirmation basis.",
-		CurrentGap:   "The first runnable family now emits the bounded default row set, but exact patch-surface rows and stronger service-account swap rows still need follow-on eligibility work.",
+		CurrentGap:   WorkloadIdentityPivotCurrentGap(),
 		BestCurrentExamples: []string{
 			"workloads -> service-accounts -> permissions",
 			"workloads -> service-accounts -> privesc",

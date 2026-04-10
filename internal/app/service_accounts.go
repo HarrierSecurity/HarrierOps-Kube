@@ -173,6 +173,7 @@ func enrichServiceAccountPaths(
 			EvidenceStatus:       power.EvidenceStatus,
 			Priority:             semanticPriority(score),
 			PowerSummary:         power.Summary,
+			PowerRank:            power.Score,
 			TokenPosture:         tokenPosture.Summary,
 			WhyCare:              deriveServiceAccountWhyCare(power, len(relatedWorkloads), len(exposedWorkloads), len(riskyWorkloads), tokenPosture),
 		})
