@@ -208,7 +208,7 @@ func buildCommandPayload(command string, options Options, selection ...string) (
 	}
 
 	if command == chains.GroupedCommandName {
-		return buildChainsPayload(selectedFamily)
+		return buildChainsPayload(selectedFamily, options)
 	}
 
 	factProvider, err := provider.NewFixtureProvider(options.FixtureDir)

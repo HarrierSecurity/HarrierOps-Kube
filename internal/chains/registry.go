@@ -11,7 +11,7 @@ const GroupedCommandName = "chains"
 var groupedCommandInputModes = []string{"live", "artifacts"}
 var preferredArtifactOrder = []string{"loot", "json"}
 
-const currentBehavior = "Family overview and grouped scaffold. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to inspect one family contract before runnable chain execution lands."
+const currentBehavior = "Family overview and grouped runner. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to run one family from current scope."
 
 type SourceSpec struct {
 	Command       string
@@ -36,11 +36,11 @@ type FamilySpec struct {
 var familySpecs = []FamilySpec{
 	{
 		Name:         "workload-identity-pivot",
-		State:        "planned",
+		State:        "implemented",
 		Meaning:      "A current foothold can likely influence a workload or workload-linked service account that already carries stronger downstream control.",
 		Summary:      "Follow the shortest visible workload-to-identity pivot toward stronger service-account-backed Kubernetes control.",
 		AllowedClaim: "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, or stronger control without the explicit control edge and confirmation basis.",
-		CurrentGap:   "The scaffold is in place, but the runnable family still needs registry-backed handlers, proof-light evaluation, and defended rows that keep internal proof states separate from operator-facing path wording.",
+		CurrentGap:   "The first runnable family now emits the bounded default row set, but exact patch-surface rows and stronger service-account swap rows still need follow-on eligibility work.",
 		BestCurrentExamples: []string{
 			"workloads -> service-accounts -> permissions",
 			"workloads -> service-accounts -> privesc",
@@ -109,12 +109,13 @@ var familySpecs = []FamilySpec{
 					"name",
 					"namespace",
 					"service_account_name",
+					"visible_patch_surfaces",
 					"related_exposures",
 					"public_exposure",
 					"service_account_power",
 					"priority",
 				},
-				Rationale: "Provides the workload-side insertion point, exposure context, and the attached service account that could change the next move.",
+				Rationale: "Provides the workload-side insertion point, exposure context, attached service account, and the visible change surfaces that could make a workload patch row operator-complete.",
 			},
 			{
 				Command: "service-accounts",

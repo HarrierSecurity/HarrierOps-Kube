@@ -39,22 +39,22 @@ var commandHelpTopics = map[string]commandHelpTopic{
 		Name:          "chains",
 		Section:       "orchestration",
 		Status:        "implemented",
-		Summary:       "Grouped family overview for narrow defended path surfaces, with the first Kubernetes family registry declared now.",
-		OperatorValue: "Review the grouped family plan before path logic lands so the command surface, claim boundary, and backing evidence stay honest.",
-		SecurityValue: "This is where workload, service-account, permission, secret, and escalation evidence becomes one defended path story instead of five separate triage views.",
-		WhyCare:       "The grouped surface should save real stitching time later, so the scaffold needs to make meaning, claim boundary, and backing commands obvious from day one.",
+		Summary:       "Grouped family overview plus the first runnable defended path family from current scope.",
+		OperatorValue: "Review which family answers the next operator question, then run that family against the current foothold instead of stitching five separate tables by hand.",
+		SecurityValue: "This is where workload, service-account, permission, secret, and escalation evidence becomes one bounded path story instead of five separate triage views.",
+		WhyCare:       "The operator should be able to move from visible foothold evidence to a defended next review without translating internal proof-state jargon.",
 		OutputHighlights: []string{
 			"grouped command name, command state, and current behavior",
 			"family state, meaning, summary, and allowed claim",
-			"planned row shape such as path type, confidence boundary, and next review",
+			"family rows such as workload, subversion point, path type, and kubernetes control",
+			"visibility, next review, and evidence-bounded note text",
 			"path type guide separated from the internal proof ladder",
-			"backing source commands and minimum required row fields",
-			"current gap statement before a family becomes runnable",
+			"backing source commands and current family gap",
 		},
 		Notes: []string{
-			"This first slice is scaffold-only: the family registry is visible now, but runnable Kubernetes chain execution lands next.",
-			"Planned row wording is source-oriented: the future table should teach path type and confidence boundary, not force the operator to interpret internal proof-state jargon.",
-			"Use `harrierops-kube chains` for the overview and `harrierops-kube chains workload-identity-pivot` to inspect the first family contract.",
+			"Use `harrierops-kube chains` for the overview and `harrierops-kube chains workload-identity-pivot` to run the first live family from current scope.",
+			"Live row wording stays evidence-bounded: it should show what is visible, what current foothold can do, and what still needs review.",
+			"Exact workload patch-surface rows stay suppressed until the family can defend them honestly.",
 		},
 		Example: "harrierops-kube chains workload-identity-pivot --output table",
 	},
@@ -240,7 +240,7 @@ func rootHelpText() string {
 	}
 	builder.WriteString("\n")
 	builder.WriteString("help notes:\n")
-	builder.WriteString("  `chains` is now a grouped family scaffold; run `harrierops-kube chains` to review the registry.\n")
+	builder.WriteString("  `chains` now has a family overview plus a runnable `workload-identity-pivot` family.\n")
 	builder.WriteString("  `rbac` marks known built-in roles with `*`; that marker is name-based and heuristic.\n")
 	builder.WriteString("  Partial or blocked reads should stay visible with issues instead of disappearing quietly.\n")
 	builder.WriteString("  Run `harrierops-kube <command> help` for command meaning, why care, output highlights, and example usage.\n")

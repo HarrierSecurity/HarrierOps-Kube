@@ -1,6 +1,6 @@
 {
   "command_state": "scaffold",
-  "current_behavior": "Family overview and grouped scaffold. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to inspect one family contract before runnable chain execution lands.",
+  "current_behavior": "Family overview and grouped runner. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to run one family from current scope.",
   "families": [
     {
       "allowed_claim": "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, or stronger control without the explicit control edge and confirmation basis.",
@@ -9,7 +9,7 @@
         "workloads -> service-accounts -> privesc",
         "secrets -> workloads -> service-accounts"
       ],
-      "current_gap": "The scaffold is in place, but the runnable family still needs registry-backed handlers, proof-light evaluation, and defended rows that keep internal proof states separate from operator-facing path wording.",
+      "current_gap": "The first runnable family now emits the bounded default row set, but exact patch-surface rows and stronger service-account swap rows still need follow-on eligibility work.",
       "family": "workload-identity-pivot",
       "internal_proof_ladder": [
         {
@@ -75,12 +75,13 @@
             "name",
             "namespace",
             "service_account_name",
+            "visible_patch_surfaces",
             "related_exposures",
             "public_exposure",
             "service_account_power",
             "priority"
           ],
-          "rationale": "Provides the workload-side insertion point, exposure context, and the attached service account that could change the next move."
+          "rationale": "Provides the workload-side insertion point, exposure context, attached service account, and the visible change surfaces that could make a workload patch row operator-complete."
         },
         {
           "command": "service-accounts",
@@ -143,7 +144,7 @@
           "rationale": "Provides secret-bearing trust paths that can corroborate why a workload-linked identity path matters now versus later."
         }
       ],
-      "state": "planned",
+      "state": "implemented",
       "summary": "Follow the shortest visible workload-to-identity pivot toward stronger service-account-backed Kubernetes control."
     }
   ],

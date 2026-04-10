@@ -118,6 +118,7 @@ func TestCLIAllowsSharedFlagsAfterCommand(t *testing.T) {
 }
 
 func TestChainsAllowsFamilyBeforeSharedFlags(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
@@ -125,7 +126,7 @@ func TestChainsAllowsFamilyBeforeSharedFlags(t *testing.T) {
 		[]string{"chains", "workload-identity-pivot", "--output", "json"},
 		stdout,
 		stderr,
-		nil,
+		[]string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir},
 	)
 
 	if exitCode != 0 {
@@ -133,8 +134,8 @@ func TestChainsAllowsFamilyBeforeSharedFlags(t *testing.T) {
 	}
 
 	payload := decodeJSONMap(t, stdout.Bytes())
-	if payload["selected_family"] != "workload-identity-pivot" {
-		t.Fatalf("selected_family = %v, want workload-identity-pivot", payload["selected_family"])
+	if payload["family"] != "workload-identity-pivot" {
+		t.Fatalf("family = %v, want workload-identity-pivot", payload["family"])
 	}
 }
 
@@ -285,7 +286,7 @@ func TestNoArgsShowDedicatedRootHelpSurface(t *testing.T) {
 		"permissions",
 		"later depth surfaces:",
 		"images",
-		"`chains` is now a grouped family scaffold",
+		"`chains` now has a family overview plus a runnable `workload-identity-pivot` family",
 		"`rbac` marks known built-in roles with `*`",
 	} {
 		if !strings.Contains(rendered, want) {
@@ -325,7 +326,7 @@ func TestCommandHelpShowsTopicAfterCommand(t *testing.T) {
 	}
 }
 
-func TestChainsHelpShowsScaffoldTopic(t *testing.T) {
+func TestChainsHelpShowsRunnableFamilyTopic(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
@@ -342,16 +343,65 @@ func TestChainsHelpShowsScaffoldTopic(t *testing.T) {
 		"harrierops-kube chains help",
 		"section: orchestration",
 		"status: implemented",
-		"Grouped family overview for narrow defended path surfaces",
+		"Grouped family overview plus the first runnable defended path family from current scope.",
 		"workload-identity-pivot",
 		"path type",
-		"confidence boundary",
 		"internal proof ladder",
-		"This first slice is scaffold-only",
+		"kubernetes control",
+		"Live row wording stays evidence-bounded",
+		"Exact workload patch-surface rows stay suppressed until the family can defend them honestly.",
 		"harrierops-kube chains workload-identity-pivot --output table",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("chains help output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestChainsSelectedFamilyCSVOutputIncludesLiveRows(t *testing.T) {
+	fixtureDir := testFixtureDir(t)
+	outDir := t.TempDir()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run(
+		[]string{"chains", "workload-identity-pivot", "--output", "csv", "--outdir", outDir},
+		stdout,
+		stderr,
+		[]string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + fixtureDir},
+	)
+
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"priority",
+		"source_asset",
+		"subversion_point",
+		"default/fox-admin",
+		"review visible workload-linked token path",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("csv output missing %q in %q", want, rendered)
+		}
+	}
+
+	artifactPath := filepath.Join(outDir, "csv", "chains.csv")
+	artifactBytes, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("read csv artifact: %v", err)
+	}
+
+	artifact := string(artifactBytes)
+	for _, want := range []string{
+		"priority",
+		"source_asset",
+		"default/fox-admin",
+	} {
+		if !strings.Contains(artifact, want) {
+			t.Fatalf("csv artifact missing %q in %q", want, artifact)
 		}
 	}
 }
@@ -436,7 +486,7 @@ func TestGoldenOutputsForImplementedCommands(t *testing.T) {
 }
 
 func TestChainsPayloadShowsSelectedFamilyContract(t *testing.T) {
-	payload, err := buildCommandPayload("chains", Options{}, "workload-identity-pivot")
+	payload, err := buildCommandPayload("chains", Options{FixtureDir: testFixtureDir(t)}, "workload-identity-pivot")
 	if err != nil {
 		t.Fatalf("buildCommandPayload() error = %v", err)
 	}
@@ -444,33 +494,33 @@ func TestChainsPayloadShowsSelectedFamilyContract(t *testing.T) {
 	if payload["grouped_command_name"] != "chains" {
 		t.Fatalf("grouped_command_name = %v, want chains", payload["grouped_command_name"])
 	}
-	if payload["command_state"] != "scaffold" {
-		t.Fatalf("command_state = %v, want scaffold", payload["command_state"])
+	if payload["command_state"] != "ok" {
+		t.Fatalf("command_state = %v, want ok", payload["command_state"])
 	}
-	if payload["selected_family"] != "workload-identity-pivot" {
-		t.Fatalf("selected_family = %v, want workload-identity-pivot", payload["selected_family"])
+	if payload["family"] != "workload-identity-pivot" {
+		t.Fatalf("family = %v, want workload-identity-pivot", payload["family"])
+	}
+	if payload["input_mode"] != "live" {
+		t.Fatalf("input_mode = %v, want live", payload["input_mode"])
 	}
 
-	families, ok := payload["families"].([]any)
+	paths, ok := payload["paths"].([]any)
 	if !ok {
-		t.Fatalf("families = %T, want []any", payload["families"])
+		t.Fatalf("paths = %T, want []any", payload["paths"])
 	}
-	if len(families) != 1 {
-		t.Fatalf("len(families) = %d, want 1", len(families))
+	if len(paths) == 0 {
+		t.Fatalf("len(paths) = %d, want at least 1", len(paths))
 	}
 
-	family := requireMap(t, families[0])
-	if family["state"] != "planned" {
-		t.Fatalf("family.state = %v, want planned", family["state"])
+	first := requireMap(t, paths[0])
+	if first["source_asset"] != "default/fox-admin" {
+		t.Fatalf("first.source_asset = %v, want default/fox-admin", first["source_asset"])
 	}
-	if _, ok := family["planned_row_shape"]; !ok {
-		t.Fatalf("family = %#v, want planned_row_shape", family)
+	if first["path_type"] != "direct control not confirmed" {
+		t.Fatalf("first.path_type = %v, want direct control not confirmed", first["path_type"])
 	}
-	if _, ok := family["path_type_guide"]; !ok {
-		t.Fatalf("family = %#v, want path_type_guide", family)
-	}
-	if _, ok := family["internal_proof_ladder"]; !ok {
-		t.Fatalf("family = %#v, want internal_proof_ladder", family)
+	if first["visibility_tier"] != "medium" {
+		t.Fatalf("first.visibility_tier = %v, want medium", first["visibility_tier"])
 	}
 }
 
@@ -494,34 +544,128 @@ func TestChainsTableOutputStaysOperatorReadable(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	exitCode := Run([]string{"chains", "workload-identity-pivot"}, stdout, stderr, nil)
+	exitCode := Run([]string{"chains", "workload-identity-pivot"}, stdout, stderr, []string{"HARRIEROPS_KUBE_FIXTURE_DIR=" + testFixtureDir(t)})
 	if exitCode != 0 {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
 	rendered := stdout.String()
 	for _, want := range []string{
-		"harrierops-kube chains",
-		"family",
-		"state",
-		"backing commands",
+		"priority",
+		"workload",
+		"subversion point",
+		"kubernetes control",
+		"visibility",
 		"note",
-		"contract",
-		"Takeaway:",
-		"workload-identity-pivot",
-		"workloads",
-		"service-accounts",
-		"Claim boundary:",
-		"Current family gap:",
-		"Planned row shape:",
-		"Path type guide:",
-		"Internal proof ladder:",
-		"direct control visible",
-		"confidence boundary",
+		"default/fox-admin",
+		"review visible workload-linked token path",
+		"direct control not confirmed",
+		"attached service account has cluster-wide admin-like access",
+		"medium",
+		"Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("table output missing %q in %q", want, rendered)
 		}
+	}
+}
+
+func TestBuildSelectedChainPayloadKeepsRunnableRowsWhenExposureSupportReadFails(t *testing.T) {
+	namespace := "app"
+	payload, err := buildSelectedChainPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			ClusterName: "lab-cluster",
+			Namespace:   namespace,
+		},
+		whoamiData: model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "fox-operator",
+				Kind:       "User",
+				Confidence: "direct",
+			},
+		},
+		workloadsData: model.WorkloadsData{
+			WorkloadAssets: []model.Workload{
+				{
+					ID:                 "pod:app:web",
+					Name:               "web",
+					Namespace:          namespace,
+					Kind:               "Pod",
+					ServiceAccountName: "web",
+					Images:             []string{"nginx"},
+				},
+			},
+		},
+		serviceAccountsData: model.ServiceAccountsData{
+			ServiceAccounts: []model.ServiceAccount{
+				{
+					ID:        "serviceaccount:app:web",
+					Name:      "web",
+					Namespace: namespace,
+				},
+			},
+		},
+		rbacData: model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{
+					ID:             "grant:user:exec",
+					BindingName:    "user-exec",
+					Scope:          "namespace/app",
+					SubjectKind:    "User",
+					SubjectName:    "fox-operator",
+					EvidenceStatus: "direct",
+					WorkloadActions: []model.WorkloadAction{
+						{
+							Verb:            "exec",
+							TargetGroup:     "pods",
+							TargetResources: []string{"pods/exec"},
+							Summary:         "can exec into pods",
+						},
+					},
+				},
+				{
+					ID:               "grant:sa:secret-read",
+					BindingName:      "web-secret-read",
+					Scope:            "namespace/app",
+					SubjectKind:      "ServiceAccount",
+					SubjectName:      "web",
+					SubjectNamespace: &namespace,
+					EvidenceStatus:   "direct",
+					DangerousRights:  []string{"read secrets"},
+				},
+			},
+		},
+		exposuresErr: errors.New("forbidden"),
+	}, provider.QueryOptions{}, "workload-identity-pivot")
+	if err != nil {
+		t.Fatalf("buildSelectedChainPayload() error = %v", err)
+	}
+
+	if payload["family"] != "workload-identity-pivot" {
+		t.Fatalf("family = %v, want workload-identity-pivot", payload["family"])
+	}
+
+	paths, ok := payload["paths"].([]any)
+	if !ok || len(paths) == 0 {
+		t.Fatalf("paths = %#v, want non-empty []any", payload["paths"])
+	}
+
+	issues, ok := payload["issues"].([]any)
+	if !ok || len(issues) == 0 {
+		t.Fatalf("issues = %#v, want support-read issue", payload["issues"])
+	}
+
+	foundExposureIssue := false
+	for _, issue := range issues {
+		scope, _ := requireMap(t, issue)["scope"].(string)
+		if scope == "chains.exposure" {
+			foundExposureIssue = true
+			break
+		}
+	}
+	if !foundExposureIssue {
+		t.Fatalf("issues = %#v, want chains.exposure issue", issues)
 	}
 }
 

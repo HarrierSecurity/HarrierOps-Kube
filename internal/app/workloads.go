@@ -133,19 +133,20 @@ func enrichWorkloadPaths(
 		score := workloadPathScore(workload, serviceAccountPath, publicExposure, len(exposures), len(riskSignals))
 
 		rows = append(rows, model.WorkloadPath{
-			ID:                  workload.ID,
-			Kind:                workload.Kind,
-			Name:                workload.Name,
-			Namespace:           workload.Namespace,
-			ServiceAccountName:  workload.ServiceAccountName,
-			IdentitySummary:     identitySummary,
-			ServiceAccountPower: serviceAccountPath.PowerSummary,
-			Images:              workload.Images,
-			RelatedExposures:    relatedExposures,
-			PublicExposure:      publicExposure,
-			RiskSignals:         riskSignals,
-			Priority:            semanticPriority(score),
-			WhyCare:             deriveWorkloadWhyCare(workload, serviceAccountPath, relatedExposures, publicExposure, riskSignals),
+			ID:                   workload.ID,
+			Kind:                 workload.Kind,
+			Name:                 workload.Name,
+			Namespace:            workload.Namespace,
+			ServiceAccountName:   workload.ServiceAccountName,
+			IdentitySummary:      identitySummary,
+			ServiceAccountPower:  serviceAccountPath.PowerSummary,
+			Images:               workload.Images,
+			VisiblePatchSurfaces: visibleWorkloadPatchSurfaces(workload),
+			RelatedExposures:     relatedExposures,
+			PublicExposure:       publicExposure,
+			RiskSignals:          riskSignals,
+			Priority:             semanticPriority(score),
+			WhyCare:              deriveWorkloadWhyCare(workload, serviceAccountPath, relatedExposures, publicExposure, riskSignals),
 		})
 	}
 
@@ -201,6 +202,38 @@ func summarizeWorkloadExposures(exposures []model.Exposure) ([]string, bool) {
 
 func summarizeWorkloadRiskSignals(workload model.Workload) []string {
 	return workloadRiskSignals(workload)
+}
+
+func visibleWorkloadPatchSurfaces(workload model.Workload) []string {
+	surfaces := []string{}
+	if len(workload.Images) > 0 {
+		surfaces = append(surfaces, "image")
+	}
+	if len(workload.Command) > 0 {
+		surfaces = append(surfaces, "command")
+	}
+	if len(workload.Args) > 0 {
+		surfaces = append(surfaces, "args")
+	}
+	if len(workload.EnvNames) > 0 {
+		surfaces = append(surfaces, "env")
+	}
+	if workload.ServiceAccountName != "" {
+		surfaces = append(surfaces, "service account")
+	}
+	if len(workload.MountedSecretRefs) > 0 {
+		surfaces = append(surfaces, "mounted secret refs")
+	}
+	if len(workload.MountedConfigRefs) > 0 {
+		surfaces = append(surfaces, "mounted config refs")
+	}
+	if len(workload.InitContainers) > 0 {
+		surfaces = append(surfaces, "init containers")
+	}
+	if len(workload.Sidecars) > 0 {
+		surfaces = append(surfaces, "sidecars")
+	}
+	return surfaces
 }
 
 func deriveWorkloadIdentitySummary(workload model.Workload, serviceAccountPath model.ServiceAccountPath) string {

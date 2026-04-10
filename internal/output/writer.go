@@ -335,6 +335,11 @@ func renderCSV(command string, payload map[string]any) (string, error) {
 	if !ok {
 		rowKey = ""
 	}
+	if command == "chains" {
+		if _, hasPaths := payload["paths"]; hasPaths {
+			rowKey = "paths"
+		}
+	}
 
 	var rows []map[string]any
 	var err error
@@ -392,6 +397,10 @@ func renderKeyValueTable(payload map[string]any) (string, error) {
 }
 
 func renderChainsTable(payload map[string]any) (string, error) {
+	if _, ok := payload["paths"]; ok {
+		return renderChainsFamilyTable(payload)
+	}
+
 	rows, err := rowsForKey(payload, "families")
 	if err != nil {
 		return "", err
@@ -441,6 +450,56 @@ func renderChainsTable(payload map[string]any) (string, error) {
 	builder.WriteByte('\n')
 	appendIssueSection(&builder, payload)
 	return builder.String(), nil
+}
+
+func renderChainsFamilyTable(payload map[string]any) (string, error) {
+	rows, err := rowsForKey(payload, "paths")
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return renderTriageEmptyState(payload, "No bounded workload-identity pivot rows were confirmed from current scope."), nil
+	}
+
+	records := make([]detailTableRecord, 0, len(rows))
+	for _, row := range rows {
+		control := stringify(row["likely_kubernetes_control"])
+		if control == "" {
+			control = "control still bounded"
+		}
+
+		detailParts := []string{}
+		for _, part := range []string{
+			stringify(row["why_stop_here"]),
+			stringify(row["confidence_boundary"]),
+			stringify(row["summary"]),
+		} {
+			if part != "" {
+				detailParts = append(detailParts, part)
+			}
+		}
+
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["priority"]),
+				stringify(row["source_asset"]),
+				stringify(row["subversion_point"]),
+				stringify(row["path_type"]),
+				control,
+				stringify(row["visibility_tier"]),
+				stringify(row["next_review"]),
+			},
+			detail: strings.Join(detailParts, " "),
+		})
+	}
+
+	return renderDetailedTriageTable(
+		payload,
+		[]string{"priority", "workload", "subversion point", "path type", "kubernetes control", "visibility", "next review"},
+		records,
+		"note",
+		"No bounded workload-identity pivot rows were confirmed from current scope.",
+	)
 }
 
 func renderWhoAmITable(payload map[string]any) (string, error) {

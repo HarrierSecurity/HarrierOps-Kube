@@ -203,6 +203,41 @@ func TestServiceAccountsLoadFixtureFindings(t *testing.T) {
 	}
 }
 
+func TestWorkloadsDecodeVisiblePatchSurfaceFields(t *testing.T) {
+	provider := newFixtureProvider(t)
+
+	data, err := provider.Workloads(QueryOptions{})
+	if err != nil {
+		t.Fatalf("Workloads() error = %v", err)
+	}
+	if len(data.WorkloadAssets) == 0 {
+		t.Fatal("WorkloadAssets = empty, want fixture rows")
+	}
+
+	foxAdmin := data.WorkloadAssets[0]
+	if len(foxAdmin.Command) == 0 || foxAdmin.Command[0] != "/bin/sh" {
+		t.Fatalf("Command = %#v, want /bin/sh first", foxAdmin.Command)
+	}
+	if len(foxAdmin.Args) == 0 || foxAdmin.Args[0] != "-c" {
+		t.Fatalf("Args = %#v, want -c first", foxAdmin.Args)
+	}
+	if len(foxAdmin.EnvNames) == 0 || foxAdmin.EnvNames[0] != "AZURE_CLIENT_ID" {
+		t.Fatalf("EnvNames = %#v, want AZURE_CLIENT_ID first", foxAdmin.EnvNames)
+	}
+	if len(foxAdmin.MountedSecretRefs) == 0 || foxAdmin.MountedSecretRefs[0] != "fox-admin-token" {
+		t.Fatalf("MountedSecretRefs = %#v, want fox-admin-token first", foxAdmin.MountedSecretRefs)
+	}
+	if len(foxAdmin.MountedConfigRefs) == 0 || foxAdmin.MountedConfigRefs[0] != "fox-admin-config" {
+		t.Fatalf("MountedConfigRefs = %#v, want fox-admin-config first", foxAdmin.MountedConfigRefs)
+	}
+	if len(foxAdmin.InitContainers) == 0 || foxAdmin.InitContainers[0] != "init-permissions" {
+		t.Fatalf("InitContainers = %#v, want init-permissions first", foxAdmin.InitContainers)
+	}
+	if len(foxAdmin.Sidecars) == 0 || foxAdmin.Sidecars[0] != "log-shipper" {
+		t.Fatalf("Sidecars = %#v, want log-shipper first", foxAdmin.Sidecars)
+	}
+}
+
 func newFixtureProvider(t *testing.T) Provider {
 	t.Helper()
 

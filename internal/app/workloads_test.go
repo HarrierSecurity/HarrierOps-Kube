@@ -54,6 +54,9 @@ func TestWorkloadsPayloadRanksJoinedWorkloadPaths(t *testing.T) {
 	if !strings.Contains(web["why_care"].(string), "public-looking exposure path") {
 		t.Fatalf("web-5d4f6 why_care = %q, want exposure wording", web["why_care"])
 	}
+	if got := requireStringSlice(t, web["visible_patch_surfaces"]); !equalStrings(got, []string{"image", "service account"}) {
+		t.Fatalf("web-5d4f6 visible_patch_surfaces = %#v, want image + service account", got)
+	}
 
 	foxAdmin := findWorkloadRow(t, rows, "default", "fox-admin")
 	if foxAdmin["priority"] != "high" {
@@ -62,13 +65,39 @@ func TestWorkloadsPayloadRanksJoinedWorkloadPaths(t *testing.T) {
 	if !strings.Contains(foxAdmin["identity_summary"].(string), "cluster-wide admin-like access") {
 		t.Fatalf("fox-admin identity_summary = %v, want strong identity path", foxAdmin["identity_summary"])
 	}
+	if got := requireStringSlice(t, foxAdmin["visible_patch_surfaces"]); !equalStrings(got, []string{
+		"image",
+		"command",
+		"args",
+		"env",
+		"service account",
+		"mounted secret refs",
+		"mounted config refs",
+		"init containers",
+		"sidecars",
+	}) {
+		t.Fatalf("fox-admin visible_patch_surfaces = %#v, want workload patch surfaces", got)
+	}
 }
 
 func TestWorkloadEnrichmentPrioritizesExposureIdentityAndExecution(t *testing.T) {
 	rows := enrichWorkloadPaths(
 		model.WorkloadsData{
 			WorkloadAssets: []model.Workload{
-				{ID: "pod:edge:frontdoor", Namespace: "edge", Name: "frontdoor", Kind: "Pod", ServiceAccountName: "frontdoor", Images: []string{"ghcr.io/example/frontdoor:1.2.3"}},
+				{
+					ID:                 "deployment:edge:frontdoor",
+					Namespace:          "edge",
+					Name:               "frontdoor",
+					Kind:               "Deployment",
+					ServiceAccountName: "frontdoor",
+					Images:             []string{"ghcr.io/example/frontdoor:1.2.3"},
+					Command:            []string{"nginx"},
+					Args:               []string{"-g", "daemon off;"},
+					EnvNames:           []string{"LOG_LEVEL"},
+					MountedConfigRefs:  []string{"frontdoor-config"},
+					Sidecars:           []string{"log-shipper"},
+					Replicas:           intPtr(3),
+				},
 				{ID: "pod:ops:builder", Namespace: "ops", Name: "builder", Kind: "Pod", ServiceAccountName: "default", HostPathMounts: []string{"/var/lib/kubelet"}, HostNetwork: true, HostPID: true, AutomountServiceAccountToken: boolPtr(true)},
 				{ID: "pod:default:quiet", Namespace: "default", Name: "quiet", Kind: "Pod", ServiceAccountName: "default"},
 			},
@@ -102,6 +131,17 @@ func TestWorkloadEnrichmentPrioritizesExposureIdentityAndExecution(t *testing.T)
 	}
 	if rows[0].ServiceAccountPower != "can read secrets" {
 		t.Fatalf("edge/frontdoor ServiceAccountPower = %q, want can read secrets", rows[0].ServiceAccountPower)
+	}
+	if got := rows[0].VisiblePatchSurfaces; !equalStrings(got, []string{
+		"image",
+		"command",
+		"args",
+		"env",
+		"service account",
+		"mounted config refs",
+		"sidecars",
+	}) {
+		t.Fatalf("edge/frontdoor VisiblePatchSurfaces = %#v, want ordered patch surfaces", got)
 	}
 	if rows[1].Namespace != "ops" || rows[1].Name != "builder" {
 		t.Fatalf("second row = %s/%s, want ops/builder", rows[1].Namespace, rows[1].Name)
@@ -214,4 +254,39 @@ func TestWorkloadsTableOutputStaysOperatorReadable(t *testing.T) {
 			t.Fatalf("table output missing %q in %q", want, rendered)
 		}
 	}
+}
+
+func requireStringSlice(t *testing.T, value any) []string {
+	t.Helper()
+
+	items, ok := value.([]any)
+	if !ok {
+		t.Fatalf("value = %T, want []any", value)
+	}
+
+	got := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			t.Fatalf("item = %T, want string", item)
+		}
+		got = append(got, text)
+	}
+	return got
+}
+
+func equalStrings(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for index := range got {
+		if got[index] != want[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func intPtr(value int) *int {
+	return &value
 }

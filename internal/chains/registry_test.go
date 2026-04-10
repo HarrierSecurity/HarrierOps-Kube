@@ -28,8 +28,8 @@ func TestRegistryKeepsFirstFamilyOrder(t *testing.T) {
 }
 
 func TestRegistryImplementedStateDrivesRunnableFamilies(t *testing.T) {
-	if got := ImplementedFamilyNames(); len(got) != 0 {
-		t.Fatalf("ImplementedFamilyNames() = %#v, want none during scaffold slice", got)
+	if got := ImplementedFamilyNames(); !reflect.DeepEqual(got, []string{"workload-identity-pivot"}) {
+		t.Fatalf("ImplementedFamilyNames() = %#v, want workload-identity-pivot", got)
 	}
 }
 
@@ -82,8 +82,8 @@ func TestBuildScaffoldOutputReturnsSelectedFamilyOnly(t *testing.T) {
 	if len(output.Families) != 1 {
 		t.Fatalf("len(families) = %d, want 1", len(output.Families))
 	}
-	if output.Families[0].State != "planned" {
-		t.Fatalf("family state = %q, want planned", output.Families[0].State)
+	if output.Families[0].State != "implemented" {
+		t.Fatalf("family state = %q, want implemented", output.Families[0].State)
 	}
 	if !reflect.DeepEqual(output.Families[0].PlannedRowShape, []string{
 		"priority",

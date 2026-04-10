@@ -187,6 +187,14 @@ type Workload struct {
 	Namespace                    string   `json:"namespace"`
 	ServiceAccountName           string   `json:"service_account_name"`
 	Images                       []string `json:"images"`
+	Command                      []string `json:"command"`
+	Args                         []string `json:"args"`
+	EnvNames                     []string `json:"env"`
+	MountedSecretRefs            []string `json:"mounted_secret_refs"`
+	MountedConfigRefs            []string `json:"mounted_config_refs"`
+	InitContainers               []string `json:"init_containers"`
+	Sidecars                     []string `json:"sidecars"`
+	Replicas                     *int     `json:"replicas,omitempty"`
 	Privileged                   bool     `json:"privileged"`
 	AllowPrivilegeEscalation     bool     `json:"allow_privilege_escalation"`
 	RunsAsRoot                   bool     `json:"runs_as_root"`
@@ -207,19 +215,20 @@ type WorkloadsData struct {
 }
 
 type WorkloadPath struct {
-	ID                  string   `json:"id"`
-	Kind                string   `json:"kind"`
-	Name                string   `json:"name"`
-	Namespace           string   `json:"namespace"`
-	ServiceAccountName  string   `json:"service_account_name"`
-	IdentitySummary     string   `json:"identity_summary"`
-	ServiceAccountPower string   `json:"service_account_power"`
-	Images              []string `json:"images"`
-	RelatedExposures    []string `json:"related_exposures"`
-	PublicExposure      bool     `json:"public_exposure"`
-	RiskSignals         []string `json:"risk_signals"`
-	Priority            string   `json:"priority"`
-	WhyCare             string   `json:"why_care"`
+	ID                   string   `json:"id"`
+	Kind                 string   `json:"kind"`
+	Name                 string   `json:"name"`
+	Namespace            string   `json:"namespace"`
+	ServiceAccountName   string   `json:"service_account_name"`
+	IdentitySummary      string   `json:"identity_summary"`
+	ServiceAccountPower  string   `json:"service_account_power"`
+	Images               []string `json:"images"`
+	VisiblePatchSurfaces []string `json:"visible_patch_surfaces"`
+	RelatedExposures     []string `json:"related_exposures"`
+	PublicExposure       bool     `json:"public_exposure"`
+	RiskSignals          []string `json:"risk_signals"`
+	Priority             string   `json:"priority"`
+	WhyCare              string   `json:"why_care"`
 }
 
 type Exposure struct {
@@ -343,6 +352,7 @@ type ChainPathRecord struct {
 	ChainID                 string   `json:"chain_id"`
 	Priority                string   `json:"priority"`
 	InternalProofState      string   `json:"internal_proof_state,omitempty"`
+	VisibilityTier          string   `json:"visibility_tier,omitempty"`
 	PathType                string   `json:"path_type"`
 	StartingFoothold        string   `json:"starting_foothold"`
 	SourceAsset             string   `json:"source_asset"`
