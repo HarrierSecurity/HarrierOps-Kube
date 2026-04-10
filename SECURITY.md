@@ -37,4 +37,5 @@ Useful security reports usually involve one of these:
 - accidental credential exposure in the repo or release artifacts
 - supply-chain or release-process weaknesses
 - output that overstates proof in a way that could mislead operators materially
+  - evaluate these against the repo's truthfulness and evidence-boundary standards
 - code execution, unsafe file handling, or similar implementation flaws in HarrierOps Kube itself

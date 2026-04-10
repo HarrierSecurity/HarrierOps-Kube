@@ -15,6 +15,29 @@ import (
 	"harrierops-kube/internal/provider"
 )
 
+func normalizedRenderText(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func normalizedTableText(text string) string {
+	lines := strings.Split(text, "\n")
+	parts := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.Trim(trimmed, "+-|") == "" {
+			continue
+		}
+		trimmed = strings.TrimPrefix(trimmed, "|")
+		trimmed = strings.TrimSuffix(trimmed, "|")
+		trimmed = strings.ReplaceAll(trimmed, "|", " ")
+		parts = append(parts, trimmed)
+	}
+	return strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
+}
+
 func TestCLICommandsSmoke(t *testing.T) {
 	fixtureDir := testFixtureDir(t)
 	commands := []string{
@@ -254,9 +277,10 @@ func TestUsageTextReflectsCurrentSurface(t *testing.T) {
 		"planned phase 1 commands: none",
 		"later depth surfaces: images",
 		"implemented sections: identity, orchestration, core, workload, exposure, secrets",
+		"harrierops-kube help [command]",
 		"harrierops-kube chains [family] [global options]",
 		"harrierops-kube <command> help",
-		"run `harrierops-kube <command> help` for operator-readable command summaries",
+		"run `harrierops-kube help <command>` or `harrierops-kube <command> help` for operator-readable command summaries",
 	} {
 		if !strings.Contains(usage, want) {
 			t.Fatalf("usage text missing %q in %q", want, usage)
@@ -276,15 +300,16 @@ func TestNoArgsShowDedicatedRootHelpSurface(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedRenderText(stdout.String())
 	for _, want := range []string{
-		"harrierops-kube help",
-		"harrierops-kube <command> help",
-		"implemented commands:",
+		"HarrierOps Kube Help",
+		"harrierops-kube help <command>",
+		"Sections:",
+		"Commands:",
 		"whoami",
 		"chains",
 		"permissions",
-		"later depth surfaces:",
+		"Later depth surfaces:",
 		"images",
 		"`chains` now has a family overview plus a runnable `workload-identity-pivot` family",
 		"`rbac` marks known built-in roles with `*`",
@@ -307,16 +332,17 @@ func TestCommandHelpShowsTopicAfterCommand(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedRenderText(stdout.String())
 	for _, want := range []string{
-		"harrierops-kube permissions help",
-		"section: identity",
-		"status: implemented",
-		"meaning: Current-foothold capability triage that answers what this session can do next.",
-		"operator value:",
-		"security value:",
-		"why care:",
+		"HarrierOps Kube Help :: permissions",
+		"Status: implemented command.",
+		"Section: identity",
+		"Offensive question: What can this current foothold do next from visible scope?",
+		"Kube frame: Collapse raw RBAC into practical capability rows for the current session.",
+		"Output highlights:",
 		"best known current identity plus `(current session)`",
+		"Security value: Secret read, workload change, exec, impersonation, bind, or escalate rights can justify immediate follow-up.",
+		"Why care: This is where a visible foothold stops looking theoretical and starts looking action-capable.",
 		"An empty result means no visible grant matched the current session identity from current scope.",
 		"harrierops-kube permissions --output table",
 	} {
@@ -338,11 +364,12 @@ func TestChainsHelpShowsRunnableFamilyTopic(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedRenderText(stdout.String())
 	for _, want := range []string{
-		"harrierops-kube chains help",
-		"section: orchestration",
-		"status: implemented",
+		"HarrierOps Kube Help :: chains",
+		"Status: implemented command.",
+		"Section: orchestration",
+		"Offensive question: What bounded chained story is already visible from current scope?",
 		"Grouped family overview plus the first runnable defended path family from current scope.",
 		"workload-identity-pivot",
 		"path type",
@@ -376,7 +403,7 @@ func TestChainsSelectedFamilyCSVOutputIncludesLiveRows(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedRenderText(stdout.String())
 	for _, want := range []string{
 		"priority",
 		"source_asset",
@@ -416,14 +443,37 @@ func TestCommandHelpShowsLaterDepthTopic(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
-		"harrierops-kube images help",
-		"status: later-depth",
+		"HarrierOps Kube Help :: images",
+		"Status: later-depth surface.",
 		"Workload-linked image triage",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("later-depth help output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestHelpCommandAliasShowsTopic(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"help", "permissions"}, stdout, stderr, nil)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	rendered := normalizedTableText(stdout.String())
+	for _, want := range []string{
+		"HarrierOps Kube Help :: permissions",
+		"Offensive question: What can this current foothold do next from visible scope?",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("help alias output missing %q in %q", want, rendered)
 		}
 	}
 }
@@ -550,7 +600,7 @@ func TestChainsTableOutputStaysOperatorReadable(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"priority",
 		"workload",
@@ -559,9 +609,14 @@ func TestChainsTableOutputStaysOperatorReadable(t *testing.T) {
 		"visibility",
 		"note",
 		"default/fox-admin",
-		"review visible workload-linked token path",
-		"direct control not confirmed",
-		"attached service account has cluster-wide admin-like access",
+		"review visible",
+		"workload-linked token",
+		"path",
+		"direct control not",
+		"confirmed",
+		"attached service",
+		"account has",
+		"cluster-wide admin-like access",
 		"medium",
 		"Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
 	} {
@@ -992,7 +1047,7 @@ func TestWhoAmITableOutputStaysOperatorReadable(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"Cluster",
 		"API Server",
@@ -1277,16 +1332,17 @@ func TestRbacTableOutputStaysOperatorReadable(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"priority",
 		"scope",
 		"subject",
 		"role",
 		"signal",
-		"why_care",
+		"why it matters",
 		"cluster-admin*",
-		"ServiceAccount default/fox-admin",
+		"ServiceAccount",
+		"default/fox-admin",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("table output missing %q in %q", want, rendered)

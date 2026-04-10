@@ -139,10 +139,8 @@ HARRIEROPS_KUBE_FIXTURE_DIR=testdata/fixtures/lab_cluster \
 ```
 
 The command surface and output contracts match the operator-facing command set above.
-The `chains` surface is scaffolded now so the first grouped family contract, claim boundary, and
-backing commands are visible before runnable path execution lands. The scaffold now also makes the
-planned row shape, path-type guide, and internal proof ladder visible so future chain wording can
-stay deterministic before family logic ships.
+The `chains` surface now includes a runnable `workload-identity-pivot` family plus the family
+overview surface.
 
 ## CLI Invocation
 

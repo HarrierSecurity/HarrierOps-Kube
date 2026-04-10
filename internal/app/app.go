@@ -60,6 +60,30 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, env []string) int {
 		return 0
 	}
 
+	if args[0] == "help" {
+		if len(args) == 1 {
+			if _, err := io.WriteString(stdout, rootHelpText()); err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
+			return 0
+		}
+		if len(args) == 2 {
+			topic, ok := helpTopic(args[1])
+			if !ok {
+				fmt.Fprintf(stderr, "help for command %q is not available\n", args[1])
+				return 2
+			}
+			if _, err := io.WriteString(stdout, commandHelpText(topic)); err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
+			return 0
+		}
+		fmt.Fprintf(stderr, "unexpected arguments after help: %s\n", strings.Join(args[1:], " "))
+		return 2
+	}
+
 	if isFlagToken(args[0]) {
 		fmt.Fprintln(stderr, "command must come first; use `harrierops-kube <command> [flags]` or `harrierops-kube <command> help`")
 		fmt.Fprintln(stderr, usageText())
@@ -336,6 +360,7 @@ func resolveFixtureDir(env []string) string {
 func usageText() string {
 	return strings.Join([]string{
 		"usage: harrierops-kube <command> [global options]",
+		"       harrierops-kube help [command]",
 		"       harrierops-kube chains [family] [global options]",
 		"       harrierops-kube <command> help",
 		"",
@@ -343,7 +368,7 @@ func usageText() string {
 		commandListLine("planned phase 1 commands", commandNamesWithStatus("planned-phase1")),
 		commandListLine("later depth surfaces", commandNamesWithStatus("later-depth")),
 		commandListLine("implemented sections", implementedSectionNames()),
-		"run `harrierops-kube <command> help` for operator-readable command summaries",
+		"run `harrierops-kube help <command>` or `harrierops-kube <command> help` for operator-readable command summaries",
 	}, "\n")
 }
 

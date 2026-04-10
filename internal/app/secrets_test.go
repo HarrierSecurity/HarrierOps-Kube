@@ -143,11 +143,12 @@ func TestSecretsTableOutputStaysOperatorReadable(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"priority",
 		"story",
-		"service-account secret: fox-admin-token",
+		"service-account secret:",
+		"fox-admin-token",
 		"image pull secret: regcred",
 		"container registry",
 	} {

@@ -24,6 +24,26 @@ go test ./...
 - Contract tests: schema and golden-output regression coverage
 - Provider tests: normalized fixture loading and override behavior
 
+## Shared Family Baseline
+
+Shared family rules for wording, output truthfulness, CLI/help shape, support types, claim-strength
+handling, and artifact conventions are maintained outside this repo by workspace maintainers.
+
+Do not turn this repo into a second source of truth for family-wide rules.
+If HarrierOps Kube needs to differ from the shared family baseline, make that exception explicit in
+the shared family documentation instead of leaving the difference implied only in README prose, help
+text, or tests.
+
+## Documentation Boundary
+
+- Keep operator-facing documentation in the repo.
+- Keep package, build, install, schema, and release metadata in the repo when the repo needs it to
+  build, validate, publish, or package correctly.
+- Move maintainer-only reference notes that operators do not need into the workspace-level
+  reference area instead of keeping them under the repo tree.
+- Do not commit repo-local reference docs that restate family rules, contract notes, or planning
+  notes when those can live in the reference area outside the repo.
+
 ## Semantics And Contracts
 
 - Keep command boundaries stable.

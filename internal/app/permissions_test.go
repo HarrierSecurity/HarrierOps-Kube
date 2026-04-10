@@ -383,6 +383,7 @@ func TestPermissionsTableOutputStaysOperatorReadable(t *testing.T) {
 		t.Fatalf("output.Render() error = %v", err)
 	}
 
+	renderedText := normalizedTableText(rendered)
 	for _, want := range []string{
 		"harrierops-kube permissions",
 		"priority",
@@ -391,11 +392,12 @@ func TestPermissionsTableOutputStaysOperatorReadable(t *testing.T) {
 		"action",
 		"scope",
 		"next_review",
-		"analyst@example.com (current session)",
+		"analyst@example.com (current",
+		"session)",
 		"can impersonate serviceaccounts",
 	} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("table output missing %q in %q", want, rendered)
+		if !strings.Contains(renderedText, want) {
+			t.Fatalf("table output missing %q in %q", want, renderedText)
 		}
 	}
 }

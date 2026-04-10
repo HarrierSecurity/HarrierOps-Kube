@@ -493,13 +493,18 @@ func renderChainsFamilyTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	return renderDetailedTriageTable(
+	rendered, err := renderDetailedTriageTable(
 		payload,
 		[]string{"priority", "workload", "subversion point", "path type", "kubernetes control", "visibility", "next review"},
 		records,
 		"note",
 		"No bounded workload-identity pivot rows were confirmed from current scope.",
+		"workload-identity pivot row(s)",
 	)
+	if err != nil {
+		return "", err
+	}
+	return "harrierops-kube chains\n\n" + rendered, nil
 }
 
 func renderWhoAmITable(payload map[string]any) (string, error) {
@@ -710,8 +715,9 @@ func renderRBACTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "scope", "subject", "role", "binding", "signal"},
 		records,
-		"why_care",
+		"why it matters",
 		"No visible RBAC grants were confirmed from current scope.",
+		"RBAC grant(s)",
 	)
 }
 
@@ -754,8 +760,9 @@ func renderServiceAccountsTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "service_account", "workloads", "power", "token_posture"},
 		records,
-		"why_care",
+		"why it matters",
 		"No visible service-account identity paths were confirmed from current scope.",
+		"service-account identity path(s)",
 	)
 }
 
@@ -803,8 +810,9 @@ func renderWorkloadsTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "workload", "identity", "exposure", "execution"},
 		records,
-		"why_care",
+		"why it matters",
 		"No visible workloads rose into triage from current scope.",
+		"workload row(s)",
 	)
 }
 
@@ -856,8 +864,9 @@ func renderExposureTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "exposure", "targets", "attribution", "backend"},
 		records,
-		"why_care",
+		"why it matters",
 		"No visible exposure paths were confirmed from current scope.",
+		"exposure path(s)",
 	)
 }
 
@@ -889,8 +898,9 @@ func renderPermissionsTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "subject", "confidence", "action", "scope", "next_review"},
 		records,
-		"why_care",
+		"why it matters",
 		"No visible current-session capability paths were confirmed from current scope.",
+		"current-session capability path(s)",
 	)
 }
 
@@ -937,8 +947,9 @@ func renderSecretsTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "story", "path", "linkage", "target"},
 		records,
-		"why_care",
+		"why it matters",
 		"No visible secret paths were confirmed from current scope.",
+		"secret path(s)",
 	)
 }
 
@@ -973,8 +984,9 @@ func renderPrivescTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "class", "foothold", "action", "outcome"},
 		records,
-		"why_care",
+		"why it matters",
 		"No visible escalation paths were confirmed from the current foothold.",
+		"escalation path(s)",
 	)
 }
 
@@ -1127,7 +1139,7 @@ type detailTableRecord struct {
 	detail  string
 }
 
-func renderDetailedTriageTable(payload map[string]any, headers []string, records []detailTableRecord, detailLabel string, emptyMessage string) (string, error) {
+func renderDetailedTriageTable(payload map[string]any, headers []string, records []detailTableRecord, detailLabel string, emptyMessage string, takeawayNoun string) (string, error) {
 	if len(records) == 0 {
 		return renderTriageEmptyState(payload, emptyMessage), nil
 	}
@@ -1144,6 +1156,7 @@ func renderDetailedTriageTable(payload map[string]any, headers []string, records
 		}
 	}
 	appendIssueSection(&builder, payload)
+	appendTakeaway(&builder, takeawayNoun, records)
 	return builder.String(), nil
 }
 
@@ -1169,6 +1182,30 @@ func appendIssueSection(builder *strings.Builder, payload map[string]any) {
 		builder.WriteString(formatIssue(issue))
 		builder.WriteString("\n")
 	}
+}
+
+func appendTakeaway(builder *strings.Builder, noun string, records []detailTableRecord) {
+	if noun == "" || len(records) == 0 {
+		return
+	}
+
+	counts := map[string]int{}
+	for _, record := range records {
+		if len(record.columns) == 0 {
+			continue
+		}
+		priority := strings.ToLower(strings.TrimSpace(record.columns[0]))
+		if priority != "" {
+			counts[priority]++
+		}
+	}
+
+	builder.WriteString("\nTakeaway: ")
+	builder.WriteString(fmt.Sprintf("%d visible %s", len(records), noun))
+	if counts["high"] > 0 || counts["medium"] > 0 || counts["low"] > 0 {
+		builder.WriteString(fmt.Sprintf("; %d high, %d medium, %d low", counts["high"], counts["medium"], counts["low"]))
+	}
+	builder.WriteString(".\n")
 }
 
 func formatIssue(issue any) string {
@@ -1200,36 +1237,23 @@ func renderSimpleTable(headers []string, records [][]string) (string, error) {
 		return "", nil
 	}
 
-	widths := make([]int, len(headers))
-	for index, header := range headers {
-		widths[index] = len(normalizeTableCell(header))
-	}
-	for _, record := range records {
-		for index := 0; index < len(headers) && index < len(record); index++ {
-			cellWidth := len(normalizeTableCell(record[index]))
-			if cellWidth > widths[index] {
-				widths[index] = cellWidth
-			}
-		}
-	}
+	widths := boundedASCIIWidths(headers, records)
 
 	var builder strings.Builder
 	border := asciiTableBorder(widths)
 	builder.WriteString(border)
 	builder.WriteByte('\n')
-	builder.WriteString(asciiTableRow(headers, widths))
-	builder.WriteByte('\n')
+	for _, line := range asciiWrappedRowLines(headers, widths) {
+		builder.WriteString(line)
+		builder.WriteByte('\n')
+	}
 	builder.WriteString(border)
 	builder.WriteByte('\n')
 	for _, record := range records {
-		row := make([]string, len(headers))
-		for index := range headers {
-			if index < len(record) {
-				row[index] = record[index]
-			}
+		for _, line := range asciiWrappedRowLines(record, widths) {
+			builder.WriteString(line)
+			builder.WriteByte('\n')
 		}
-		builder.WriteString(asciiTableRow(row, widths))
-		builder.WriteByte('\n')
 	}
 	builder.WriteString(border)
 	builder.WriteByte('\n')
@@ -1267,43 +1291,30 @@ func renderDetailedRecordTable(headers []string, record []string, detailLabel st
 		return "", nil
 	}
 
-	widths := make([]int, len(headers))
-	for index, header := range headers {
-		widths[index] = len(normalizeTableCell(header))
-	}
-	for index := 0; index < len(headers) && index < len(record); index++ {
-		cellWidth := len(normalizeTableCell(record[index]))
-		if cellWidth > widths[index] {
-			widths[index] = cellWidth
-		}
-	}
+	widths := boundedASCIIWidths(headers, [][]string{record})
 
 	border := asciiTableBorder(widths)
 	var builder strings.Builder
 	builder.WriteString(border)
 	builder.WriteByte('\n')
-	builder.WriteString(asciiTableRow(headers, widths))
-	builder.WriteByte('\n')
+	for _, line := range asciiWrappedRowLines(headers, widths) {
+		builder.WriteString(line)
+		builder.WriteByte('\n')
+	}
 	builder.WriteString(border)
 	builder.WriteByte('\n')
 
-	row := make([]string, len(headers))
-	copy(row, record)
-	builder.WriteString(asciiTableRow(row, widths))
-	builder.WriteByte('\n')
+	for _, line := range asciiWrappedRowLines(record, widths) {
+		builder.WriteString(line)
+		builder.WriteByte('\n')
+	}
 
 	if detail != "" {
-		spanWidth := asciiTableSpanWidth(widths)
-		spanBorder := asciiTableBorder([]int{spanWidth})
-		detailText := detailLabel + ": " + detail
-		builder.WriteString(spanBorder)
-		builder.WriteByte('\n')
-		for _, line := range wrapTableText(detailText, spanWidth) {
-			builder.WriteString(asciiTableSpanningRow(line, asciiTableSpanWidth(widths)))
-			builder.WriteByte('\n')
+		detailRendered, err := renderFullWidthDetailTable(asciiTableSpanWidth(widths), detailLabel, detail)
+		if err != nil {
+			return "", err
 		}
-		builder.WriteString(spanBorder)
-		builder.WriteByte('\n')
+		builder.WriteString(detailRendered)
 		return builder.String(), nil
 	}
 
@@ -1414,6 +1425,37 @@ func asciiTableRow(values []string, widths []int) string {
 	return builder.String()
 }
 
+func asciiWrappedRowLines(values []string, widths []int) []string {
+	wrappedColumns := make([][]string, len(widths))
+	maxLines := 1
+	for index, width := range widths {
+		value := ""
+		if index < len(values) {
+			value = values[index]
+		}
+		wrapped := wrapTableText(value, width)
+		if len(wrapped) == 0 {
+			wrapped = []string{""}
+		}
+		wrappedColumns[index] = wrapped
+		if len(wrapped) > maxLines {
+			maxLines = len(wrapped)
+		}
+	}
+
+	lines := make([]string, 0, maxLines)
+	for lineIndex := 0; lineIndex < maxLines; lineIndex++ {
+		row := make([]string, len(widths))
+		for columnIndex := range widths {
+			if lineIndex < len(wrappedColumns[columnIndex]) {
+				row[columnIndex] = wrappedColumns[columnIndex][lineIndex]
+			}
+		}
+		lines = append(lines, asciiTableRow(row, widths))
+	}
+	return lines
+}
+
 func asciiTableDetailRow(value string, width int) string {
 	var builder strings.Builder
 	text := normalizeTableCell(value)
@@ -1430,6 +1472,28 @@ func asciiTableSpanningRow(value string, width int) string {
 	return asciiTableDetailRow(value, width)
 }
 
+func renderFullWidthDetailTable(width int, label string, detail string) (string, error) {
+	if width <= 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	border := asciiTableBorder([]int{width})
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	builder.WriteString(asciiTableSpanningRow(label, width))
+	builder.WriteByte('\n')
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	for _, line := range wrapTableText(detail, width) {
+		builder.WriteString(asciiTableSpanningRow(line, width))
+		builder.WriteByte('\n')
+	}
+	builder.WriteString(border)
+	builder.WriteByte('\n')
+	return builder.String(), nil
+}
+
 func asciiTableSpanWidth(widths []int) int {
 	total := 0
 	for _, width := range widths {
@@ -1439,6 +1503,76 @@ func asciiTableSpanWidth(widths []int) int {
 		total += 3 * (len(widths) - 1)
 	}
 	return total
+}
+
+func boundedASCIIWidths(headers []string, records [][]string) []int {
+	widths := make([]int, len(headers))
+	for index, header := range headers {
+		widths[index] = len(normalizeTableCell(header))
+	}
+	for _, record := range records {
+		for index := 0; index < len(headers) && index < len(record); index++ {
+			cellWidth := len(normalizeTableCell(record[index]))
+			if cellWidth > widths[index] {
+				widths[index] = cellWidth
+			}
+		}
+	}
+
+	if len(headers) == 1 {
+		if widths[0] > 96 {
+			widths[0] = 96
+		}
+		return widths
+	}
+
+	if len(headers) == 2 && strings.EqualFold(headers[0], "field") {
+		if widths[0] > 24 {
+			widths[0] = 24
+		}
+		if widths[1] > 88 {
+			widths[1] = 88
+		}
+		return widths
+	}
+
+	maxPerColumn := 28
+	minPerColumn := 10
+	targetTotal := 136
+
+	for index := range widths {
+		if widths[index] > maxPerColumn {
+			widths[index] = maxPerColumn
+		}
+	}
+
+	for asciiTableTotalWidth(widths) > targetTotal {
+		widestIndex := -1
+		widestWidth := 0
+		for index, width := range widths {
+			minimum := len(normalizeTableCell(headers[index]))
+			if minimum < minPerColumn {
+				minimum = minPerColumn
+			}
+			if width <= minimum {
+				continue
+			}
+			if width > widestWidth {
+				widestWidth = width
+				widestIndex = index
+			}
+		}
+		if widestIndex == -1 {
+			break
+		}
+		widths[widestIndex]--
+	}
+
+	return widths
+}
+
+func asciiTableTotalWidth(widths []int) int {
+	return len(asciiTableBorder(widths))
 }
 
 func wrapTableText(value string, width int) []string {
