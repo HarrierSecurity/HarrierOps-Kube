@@ -57,6 +57,88 @@
       "subject_kind": "ServiceAccount",
       "subject_name": "web",
       "subject_namespace": "storefront",
+      "workload_actions": [
+        {
+          "summary": "can create pods",
+          "target_group": "pods",
+          "target_resources": [
+            "pods"
+          ],
+          "verb": "create"
+        },
+        {
+          "summary": "can create workload controllers",
+          "target_group": "workload-controllers",
+          "target_resources": [
+            "cronjobs",
+            "daemonsets",
+            "deployments",
+            "jobs",
+            "statefulsets"
+          ],
+          "verb": "create"
+        },
+        {
+          "summary": "can patch workload controllers",
+          "target_group": "workload-controllers",
+          "target_resources": [
+            "cronjobs",
+            "daemonsets",
+            "deployments",
+            "jobs",
+            "statefulsets"
+          ],
+          "verb": "patch"
+        },
+        {
+          "summary": "can update workload controllers",
+          "target_group": "workload-controllers",
+          "target_resources": [
+            "cronjobs",
+            "daemonsets",
+            "deployments",
+            "jobs",
+            "statefulsets"
+          ],
+          "verb": "update"
+        },
+        {
+          "summary": "can patch pods",
+          "target_group": "pods",
+          "target_resources": [
+            "pods"
+          ],
+          "verb": "patch"
+        },
+        {
+          "summary": "can update pods",
+          "target_group": "pods",
+          "target_resources": [
+            "pods"
+          ],
+          "verb": "update"
+        },
+        {
+          "summary": "can delete workload controllers",
+          "target_group": "workload-controllers",
+          "target_resources": [
+            "cronjobs",
+            "daemonsets",
+            "deployments",
+            "jobs",
+            "statefulsets"
+          ],
+          "verb": "delete"
+        },
+        {
+          "summary": "can delete pods",
+          "target_group": "pods",
+          "target_resources": [
+            "pods"
+          ],
+          "verb": "delete"
+        }
+      ],
       "why_care": "namespace/storefront grant stands out because of change workloads, used by 1 visible workload.",
       "workload_count": 1
     },

@@ -1,0 +1,14 @@
+{
+  "model": "ChainsScaffoldOutput",
+  "top_level_fields": [
+    "metadata",
+    "grouped_command_name",
+    "command_state",
+    "current_behavior",
+    "planned_input_modes",
+    "preferred_artifact_order",
+    "selected_family",
+    "families",
+    "issues"
+  ]
+}

@@ -35,7 +35,15 @@ func TestPrivescPayloadClassifiesImmediateIdentityAndExecutionPaths(t *testing.T
 					SubjectKind:     "User",
 					SubjectName:     "analyst@example.com",
 					DangerousRights: []string{"change workloads"},
-					EvidenceStatus:  "direct",
+					WorkloadActions: []model.WorkloadAction{
+						{
+							Verb:            "patch",
+							TargetGroup:     "workload-controllers",
+							TargetResources: []string{"deployments"},
+							Summary:         "can patch workload controllers",
+						},
+					},
+					EvidenceStatus: "direct",
 				},
 			},
 		},
@@ -66,6 +74,9 @@ func TestPrivescPayloadClassifiesImmediateIdentityAndExecutionPaths(t *testing.T
 	second := requireMap(t, rows[1])
 	if second["path_class"] != "execution-control-immediate" {
 		t.Fatalf("second path_class = %v, want execution-control-immediate", second["path_class"])
+	}
+	if second["action"] != "can patch workload controllers" {
+		t.Fatalf("second action = %v, want exact workload action", second["action"])
 	}
 	if second["next_review"] != "workloads" {
 		t.Fatalf("second next_review = %v, want workloads", second["next_review"])

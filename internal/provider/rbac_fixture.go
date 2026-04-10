@@ -49,6 +49,10 @@ type rawPolicyRule struct {
 	APIGroups []string `json:"api_groups,omitempty"`
 }
 
+var workloadActionVerbs = []string{"create", "patch", "update", "delete"}
+var workloadControllerResources = []string{"deployments", "daemonsets", "statefulsets", "jobs", "cronjobs"}
+var workloadPivotResources = append([]string{"pods"}, workloadControllerResources...)
+
 func normalizeRBACFixture(raw rawRBACFixture) model.RBACData {
 	if len(raw.RoleBindings) == 0 && len(raw.ClusterRoleBindings) == 0 {
 		return model.RBACData{
@@ -111,8 +115,10 @@ func normalizeRBACBinding(binding rawRoleBinding, bindingKind string, roleIndex 
 	roleRulesVisible := roleFound && (role.RulesVisible == nil || *role.RulesVisible)
 
 	dangerousRights := []string{}
+	workloadActions := []model.WorkloadAction{}
 	if roleRulesVisible {
 		dangerousRights = summarizeDangerousRights(role.Rules)
+		workloadActions = summarizeWorkloadActions(role.Rules)
 	}
 
 	rows := make([]model.RBACGrant, 0, len(binding.Subjects))
@@ -151,6 +157,7 @@ func normalizeRBACBinding(binding rawRoleBinding, bindingKind string, roleIndex 
 			SubjectNamespace: subjectNamespace,
 			SubjectDisplay:   grantSubjectDisplay(subject),
 			DangerousRights:  dangerousRights,
+			WorkloadActions:  cloneWorkloadActions(workloadActions),
 			RelatedWorkloads: []string{},
 			WorkloadCount:    0,
 			EvidenceStatus:   grantEvidenceStatus(roleRulesVisible),
@@ -199,7 +206,7 @@ func summarizeDangerousRights(rules []rawPolicyRule) []string {
 		if touchesResource(rule.Verbs, rule.Resources, []string{"get", "list", "watch"}, []string{"secrets"}) {
 			add("read secrets")
 		}
-		if touchesResource(rule.Verbs, rule.Resources, []string{"create", "update", "patch", "delete", "*"}, []string{"pods", "deployments", "daemonsets", "statefulsets", "jobs", "cronjobs"}) {
+		if touchesResource(rule.Verbs, rule.Resources, append([]string{}, workloadActionVerbs...), workloadPivotResources) {
 			add("change workloads")
 		}
 		if touchesResource(rule.Verbs, rule.Resources, []string{"create", "*"}, []string{"pods/exec"}) {
@@ -233,6 +240,157 @@ func summarizeDangerousRights(rules []rawPolicyRule) []string {
 		return dangerousRightScore(signals[i]) > dangerousRightScore(signals[j])
 	})
 	return signals
+}
+
+func summarizeWorkloadActions(rules []rawPolicyRule) []model.WorkloadAction {
+	actionsByKey := map[string]*model.WorkloadAction{}
+
+	for _, rule := range rules {
+		if hasWildcard(rule.Verbs) && hasWildcard(rule.Resources) {
+			continue
+		}
+
+		if touchesResource(rule.Verbs, rule.Resources, []string{"create", "*"}, []string{"pods/exec"}) {
+			addWorkloadActionTargets(actionsByKey, "exec", "pods", "can exec into pods", []string{"pods/exec"})
+		}
+
+		matchedResources := matchedResources(rule.Resources, workloadPivotResources)
+		if len(matchedResources) == 0 {
+			continue
+		}
+
+		for _, verb := range matchedVerbs(rule.Verbs, workloadActionVerbs) {
+			if slices.Contains(matchedResources, "pods") {
+				addWorkloadActionTargets(actionsByKey, verb, "pods", "can "+verb+" pods", []string{"pods"})
+			}
+
+			controllerMatches := intersectSorted(matchedResources, workloadControllerResources)
+			if len(controllerMatches) == 0 {
+				continue
+			}
+			addWorkloadActionTargets(actionsByKey, verb, "workload-controllers", "can "+verb+" workload controllers", controllerMatches)
+		}
+	}
+
+	actions := make([]model.WorkloadAction, 0, len(actionsByKey))
+	for _, action := range actionsByKey {
+		actions = append(actions, *action)
+	}
+	sort.SliceStable(actions, func(i, j int) bool {
+		left := actions[i]
+		right := actions[j]
+		if workloadActionSortRank(left) != workloadActionSortRank(right) {
+			return workloadActionSortRank(left) < workloadActionSortRank(right)
+		}
+		return left.Summary < right.Summary
+	})
+	return actions
+}
+
+func ensureWorkloadAction(actionsByKey map[string]*model.WorkloadAction, verb string, targetGroup string, summary string) *model.WorkloadAction {
+	key := verb + ":" + targetGroup
+	action := actionsByKey[key]
+	if action != nil {
+		return action
+	}
+
+	action = &model.WorkloadAction{
+		Verb:            verb,
+		TargetGroup:     targetGroup,
+		TargetResources: []string{},
+		Summary:         summary,
+	}
+	actionsByKey[key] = action
+	return action
+}
+
+func addWorkloadActionTargets(
+	actionsByKey map[string]*model.WorkloadAction,
+	verb string,
+	targetGroup string,
+	summary string,
+	targetResources []string,
+) {
+	action := ensureWorkloadAction(actionsByKey, verb, targetGroup, summary)
+	for _, resource := range targetResources {
+		action.TargetResources = addSortedUnique(action.TargetResources, resource)
+	}
+}
+
+func cloneWorkloadActions(actions []model.WorkloadAction) []model.WorkloadAction {
+	if len(actions) == 0 {
+		return nil
+	}
+
+	cloned := make([]model.WorkloadAction, 0, len(actions))
+	for _, action := range actions {
+		cloned = append(cloned, model.WorkloadAction{
+			Verb:            action.Verb,
+			TargetGroup:     action.TargetGroup,
+			TargetResources: append([]string(nil), action.TargetResources...),
+			Summary:         action.Summary,
+		})
+	}
+	return cloned
+}
+
+func matchedResources(resources []string, candidates []string) []string {
+	if hasWildcard(resources) {
+		return append([]string(nil), candidates...)
+	}
+	return intersectSorted(resources, candidates)
+}
+
+func matchedVerbs(verbs []string, candidates []string) []string {
+	if hasWildcard(verbs) {
+		return append([]string(nil), candidates...)
+	}
+	return intersectSorted(verbs, candidates)
+}
+
+func intersectSorted(values []string, candidates []string) []string {
+	matches := []string{}
+	for _, value := range values {
+		if slices.Contains(candidates, value) {
+			matches = append(matches, value)
+		}
+	}
+	sort.Strings(matches)
+	return matches
+}
+
+func addSortedUnique(values []string, candidate string) []string {
+	if slices.Contains(values, candidate) {
+		return values
+	}
+	values = append(values, candidate)
+	sort.Strings(values)
+	return values
+}
+
+func workloadActionSortRank(action model.WorkloadAction) int {
+	switch {
+	case action.Verb == "exec":
+		return 0
+	case action.Verb == "create" && action.TargetGroup == "pods":
+		return 1
+	case action.Verb == "create" && action.TargetGroup == "workload-controllers":
+		return 2
+	case action.Verb == "patch" && action.TargetGroup == "workload-controllers":
+		return 3
+	case action.Verb == "update" && action.TargetGroup == "workload-controllers":
+		return 4
+	case action.Verb == "patch" && action.TargetGroup == "pods":
+		return 5
+	case action.Verb == "update" && action.TargetGroup == "pods":
+		return 6
+	case action.Verb == "delete" && action.TargetGroup == "workload-controllers":
+		return 7
+	case action.Verb == "delete" && action.TargetGroup == "pods":
+		return 8
+	default:
+		return 9
+	}
 }
 
 func dangerousRightScore(signal string) int {

@@ -111,26 +111,34 @@ type NextCommandHint struct {
 	Why     string `json:"why"`
 }
 
+type WorkloadAction struct {
+	Verb            string   `json:"verb"`
+	TargetGroup     string   `json:"target_group"`
+	TargetResources []string `json:"target_resources"`
+	Summary         string   `json:"summary"`
+}
+
 type RBACGrant struct {
-	ID               string   `json:"id"`
-	BindingKind      string   `json:"binding_kind"`
-	BindingName      string   `json:"binding_name"`
-	Namespace        *string  `json:"namespace"`
-	Scope            string   `json:"scope"`
-	RoleKind         string   `json:"role_kind"`
-	RoleName         string   `json:"role_name"`
-	RoleDisplayName  string   `json:"role_display_name"`
-	BuiltIn          bool     `json:"built_in"`
-	SubjectKind      string   `json:"subject_kind"`
-	SubjectName      string   `json:"subject_name"`
-	SubjectNamespace *string  `json:"subject_namespace"`
-	SubjectDisplay   string   `json:"subject_display"`
-	DangerousRights  []string `json:"dangerous_rights"`
-	RelatedWorkloads []string `json:"related_workloads"`
-	WorkloadCount    int      `json:"workload_count"`
-	EvidenceStatus   string   `json:"evidence_status"`
-	Priority         string   `json:"priority"`
-	WhyCare          string   `json:"why_care"`
+	ID               string           `json:"id"`
+	BindingKind      string           `json:"binding_kind"`
+	BindingName      string           `json:"binding_name"`
+	Namespace        *string          `json:"namespace"`
+	Scope            string           `json:"scope"`
+	RoleKind         string           `json:"role_kind"`
+	RoleName         string           `json:"role_name"`
+	RoleDisplayName  string           `json:"role_display_name"`
+	BuiltIn          bool             `json:"built_in"`
+	SubjectKind      string           `json:"subject_kind"`
+	SubjectName      string           `json:"subject_name"`
+	SubjectNamespace *string          `json:"subject_namespace"`
+	SubjectDisplay   string           `json:"subject_display"`
+	DangerousRights  []string         `json:"dangerous_rights"`
+	WorkloadActions  []WorkloadAction `json:"workload_actions,omitempty"`
+	RelatedWorkloads []string         `json:"related_workloads"`
+	WorkloadCount    int              `json:"workload_count"`
+	EvidenceStatus   string           `json:"evidence_status"`
+	Priority         string           `json:"priority"`
+	WhyCare          string           `json:"why_care"`
 }
 
 type RBACData struct {
@@ -252,6 +260,9 @@ type PermissionPath struct {
 	Subject           string   `json:"subject"`
 	SubjectConfidence string   `json:"subject_confidence"`
 	Scope             string   `json:"scope"`
+	ActionVerb        string   `json:"action_verb,omitempty"`
+	TargetGroup       string   `json:"target_group,omitempty"`
+	TargetResources   []string `json:"target_resources,omitempty"`
 	ActionSummary     string   `json:"action_summary"`
 	EvidenceStatus    string   `json:"evidence_status"`
 	RelatedBindings   []string `json:"related_bindings"`
@@ -294,6 +305,58 @@ type PrivescPath struct {
 	WhatIsMissing     string `json:"what_is_missing"`
 	WhyCare           string `json:"why_care"`
 	NextReview        string `json:"next_review,omitempty"`
+}
+
+type ChainSourceDescriptor struct {
+	Command       string   `json:"command"`
+	MinimumFields []string `json:"minimum_fields"`
+	Rationale     string   `json:"rationale"`
+}
+
+type ChainFamilyDescriptor struct {
+	Family              string                  `json:"family"`
+	State               string                  `json:"state"`
+	Meaning             string                  `json:"meaning"`
+	Summary             string                  `json:"summary"`
+	AllowedClaim        string                  `json:"allowed_claim"`
+	CurrentGap          string                  `json:"current_gap"`
+	BestCurrentExamples []string                `json:"best_current_examples"`
+	PlannedRowShape     []string                `json:"planned_row_shape"`
+	PathTypeGuide       []ChainPathTypeGuide    `json:"path_type_guide"`
+	InternalProofLadder []ChainProofState       `json:"internal_proof_ladder"`
+	SourceCommands      []ChainSourceDescriptor `json:"source_commands"`
+}
+
+type ChainPathTypeGuide struct {
+	Name              string `json:"name"`
+	Meaning           string `json:"meaning"`
+	DefaultNextReview string `json:"default_next_review"`
+	PriorityIntent    string `json:"priority_intent"`
+}
+
+type ChainProofState struct {
+	State   string `json:"state"`
+	Meaning string `json:"meaning"`
+}
+
+type ChainPathRecord struct {
+	ChainID                 string   `json:"chain_id"`
+	Priority                string   `json:"priority"`
+	InternalProofState      string   `json:"internal_proof_state,omitempty"`
+	PathType                string   `json:"path_type"`
+	StartingFoothold        string   `json:"starting_foothold"`
+	SourceAsset             string   `json:"source_asset"`
+	SourceNamespace         string   `json:"source_namespace,omitempty"`
+	SubversionPoint         string   `json:"subversion_point"`
+	LikelyKubernetesControl string   `json:"likely_kubernetes_control"`
+	Urgency                 string   `json:"urgency,omitempty"`
+	WhyStopHere             string   `json:"why_stop_here"`
+	ConfidenceBoundary      string   `json:"confidence_boundary"`
+	NextReview              string   `json:"next_review"`
+	Summary                 string   `json:"summary"`
+	MissingConfirmation     string   `json:"missing_confirmation,omitempty"`
+	EvidenceCommands        []string `json:"evidence_commands"`
+	RelatedIDs              []string `json:"related_ids"`
 }
 
 type WhoAmIOutput struct {
@@ -363,4 +426,29 @@ type PrivescOutput struct {
 	Metadata   contracts.Metadata `json:"metadata"`
 	Escalation []PrivescPath      `json:"escalation_paths"`
 	Issues     []Issue            `json:"issues"`
+}
+
+type ChainsScaffoldOutput struct {
+	Metadata               contracts.Metadata      `json:"metadata"`
+	GroupedCommandName     string                  `json:"grouped_command_name"`
+	CommandState           string                  `json:"command_state"`
+	CurrentBehavior        string                  `json:"current_behavior"`
+	PlannedInputModes      []string                `json:"planned_input_modes"`
+	PreferredArtifactOrder []string                `json:"preferred_artifact_order"`
+	SelectedFamily         *string                 `json:"selected_family,omitempty"`
+	Families               []ChainFamilyDescriptor `json:"families"`
+	Issues                 []Issue                 `json:"issues"`
+}
+
+type ChainsOutput struct {
+	Metadata           contracts.Metadata `json:"metadata"`
+	GroupedCommandName string             `json:"grouped_command_name"`
+	Family             string             `json:"family"`
+	InputMode          string             `json:"input_mode"`
+	CommandState       string             `json:"command_state"`
+	Summary            string             `json:"summary"`
+	ClaimBoundary      string             `json:"claim_boundary"`
+	BackingCommands    []string           `json:"backing_commands"`
+	Paths              []ChainPathRecord  `json:"paths"`
+	Issues             []Issue            `json:"issues"`
 }

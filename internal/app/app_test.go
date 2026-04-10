@@ -19,6 +19,7 @@ func TestCLICommandsSmoke(t *testing.T) {
 	fixtureDir := testFixtureDir(t)
 	commands := []string{
 		"whoami",
+		"chains",
 		"inventory",
 		"rbac",
 		"service-accounts",
@@ -113,6 +114,27 @@ func TestCLIAllowsSharedFlagsAfterCommand(t *testing.T) {
 	}
 	if metadata["context_name"] != "lab-cluster" {
 		t.Fatalf("metadata.context_name = %v, want lab-cluster", metadata["context_name"])
+	}
+}
+
+func TestChainsAllowsFamilyBeforeSharedFlags(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run(
+		[]string{"chains", "workload-identity-pivot", "--output", "json"},
+		stdout,
+		stderr,
+		nil,
+	)
+
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	payload := decodeJSONMap(t, stdout.Bytes())
+	if payload["selected_family"] != "workload-identity-pivot" {
+		t.Fatalf("selected_family = %v, want workload-identity-pivot", payload["selected_family"])
 	}
 }
 
@@ -227,10 +249,11 @@ func TestUsageTextReflectsCurrentSurface(t *testing.T) {
 		t.Fatalf("usage text still references all-checks: %q", usage)
 	}
 	for _, want := range []string{
-		"implemented commands: whoami, inventory, rbac, service-accounts, workloads, exposure, permissions, secrets, privesc",
+		"implemented commands: whoami, chains, inventory, rbac, service-accounts, workloads, exposure, permissions, secrets, privesc",
 		"planned phase 1 commands: none",
 		"later depth surfaces: images",
-		"implemented sections: identity, core, workload, exposure, secrets",
+		"implemented sections: identity, orchestration, core, workload, exposure, secrets",
+		"harrierops-kube chains [family] [global options]",
 		"harrierops-kube <command> help",
 		"run `harrierops-kube <command> help` for operator-readable command summaries",
 	} {
@@ -258,9 +281,11 @@ func TestNoArgsShowDedicatedRootHelpSurface(t *testing.T) {
 		"harrierops-kube <command> help",
 		"implemented commands:",
 		"whoami",
+		"chains",
 		"permissions",
 		"later depth surfaces:",
 		"images",
+		"`chains` is now a grouped family scaffold",
 		"`rbac` marks known built-in roles with `*`",
 	} {
 		if !strings.Contains(rendered, want) {
@@ -296,6 +321,37 @@ func TestCommandHelpShowsTopicAfterCommand(t *testing.T) {
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("help topic output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestChainsHelpShowsScaffoldTopic(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"chains", "help"}, stdout, stderr, nil)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"harrierops-kube chains help",
+		"section: orchestration",
+		"status: implemented",
+		"Grouped family overview for narrow defended path surfaces",
+		"workload-identity-pivot",
+		"path type",
+		"confidence boundary",
+		"internal proof ladder",
+		"This first slice is scaffold-only",
+		"harrierops-kube chains workload-identity-pivot --output table",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("chains help output missing %q in %q", want, rendered)
 		}
 	}
 }
@@ -349,6 +405,7 @@ func TestGoldenOutputsForImplementedCommands(t *testing.T) {
 
 	for _, command := range []string{
 		"whoami",
+		"chains",
 		"inventory",
 		"rbac",
 		"service-accounts",
@@ -375,6 +432,96 @@ func TestGoldenOutputsForImplementedCommands(t *testing.T) {
 				t.Fatalf("payload mismatch\n got: %#v\nwant: %#v", got, want)
 			}
 		})
+	}
+}
+
+func TestChainsPayloadShowsSelectedFamilyContract(t *testing.T) {
+	payload, err := buildCommandPayload("chains", Options{}, "workload-identity-pivot")
+	if err != nil {
+		t.Fatalf("buildCommandPayload() error = %v", err)
+	}
+
+	if payload["grouped_command_name"] != "chains" {
+		t.Fatalf("grouped_command_name = %v, want chains", payload["grouped_command_name"])
+	}
+	if payload["command_state"] != "scaffold" {
+		t.Fatalf("command_state = %v, want scaffold", payload["command_state"])
+	}
+	if payload["selected_family"] != "workload-identity-pivot" {
+		t.Fatalf("selected_family = %v, want workload-identity-pivot", payload["selected_family"])
+	}
+
+	families, ok := payload["families"].([]any)
+	if !ok {
+		t.Fatalf("families = %T, want []any", payload["families"])
+	}
+	if len(families) != 1 {
+		t.Fatalf("len(families) = %d, want 1", len(families))
+	}
+
+	family := requireMap(t, families[0])
+	if family["state"] != "planned" {
+		t.Fatalf("family.state = %v, want planned", family["state"])
+	}
+	if _, ok := family["planned_row_shape"]; !ok {
+		t.Fatalf("family = %#v, want planned_row_shape", family)
+	}
+	if _, ok := family["path_type_guide"]; !ok {
+		t.Fatalf("family = %#v, want path_type_guide", family)
+	}
+	if _, ok := family["internal_proof_ladder"]; !ok {
+		t.Fatalf("family = %#v, want internal_proof_ladder", family)
+	}
+}
+
+func TestChainsCommandRejectsUnknownFamily(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"chains", "banana-path"}, stdout, stderr, nil)
+	if exitCode != 2 {
+		t.Fatalf("exit code = %d, want 2", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), `unknown chain family "banana-path"`) {
+		t.Fatalf("stderr = %q, want unknown chain family guidance", stderr.String())
+	}
+}
+
+func TestChainsTableOutputStaysOperatorReadable(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"chains", "workload-identity-pivot"}, stdout, stderr, nil)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	rendered := stdout.String()
+	for _, want := range []string{
+		"harrierops-kube chains",
+		"family",
+		"state",
+		"backing commands",
+		"note",
+		"contract",
+		"Takeaway:",
+		"workload-identity-pivot",
+		"workloads",
+		"service-accounts",
+		"Claim boundary:",
+		"Current family gap:",
+		"Planned row shape:",
+		"Path type guide:",
+		"Internal proof ladder:",
+		"direct control visible",
+		"confidence boundary",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("table output missing %q in %q", want, rendered)
+		}
 	}
 }
 

@@ -107,7 +107,15 @@ func TestPermissionsPayloadUsesInferredCurrentIdentityLabel(t *testing.T) {
 					SubjectName:      "api",
 					SubjectNamespace: stringPtr("payments"),
 					DangerousRights:  []string{"change workloads"},
-					EvidenceStatus:   "direct",
+					WorkloadActions: []model.WorkloadAction{
+						{
+							Verb:            "patch",
+							TargetGroup:     "workload-controllers",
+							TargetResources: []string{"deployments", "statefulsets"},
+							Summary:         "can patch workload controllers",
+						},
+					},
+					EvidenceStatus: "direct",
 				},
 			},
 		},
@@ -128,8 +136,91 @@ func TestPermissionsPayloadUsesInferredCurrentIdentityLabel(t *testing.T) {
 	if row["subject_confidence"] != "inferred" {
 		t.Fatalf("subject_confidence = %v, want inferred", row["subject_confidence"])
 	}
+	if row["action_summary"] != "can patch workload controllers" {
+		t.Fatalf("action_summary = %v, want exact workload action", row["action_summary"])
+	}
+	targetResources, ok := row["target_resources"].([]any)
+	if !ok || len(targetResources) != 2 {
+		t.Fatalf("target_resources = %#v, want deployment and statefulset coverage", row["target_resources"])
+	}
 	if !strings.Contains(row["why_care"].(string), "identity match is inferred") {
 		t.Fatalf("why_care = %q, want inferred-identity wording", row["why_care"])
+	}
+}
+
+func TestPermissionsPayloadPrefersExactWorkloadActionsOverGenericBucket(t *testing.T) {
+	payload, err := buildPermissionsPayload(stubInventoryProvider{
+		metadataContext: model.MetadataContext{ContextName: "ops", Namespace: "payments"},
+		whoamiData: model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "operator@example.com",
+				Kind:       "User",
+				Confidence: "direct",
+			},
+		},
+		rbacData: model.RBACData{
+			RoleGrants: []model.RBACGrant{
+				{
+					BindingName:     "operator-edit",
+					Scope:           "namespace/payments",
+					SubjectKind:     "User",
+					SubjectName:     "operator@example.com",
+					DangerousRights: []string{"change workloads", "exec into pods"},
+					WorkloadActions: []model.WorkloadAction{
+						{
+							Verb:            "create",
+							TargetGroup:     "pods",
+							TargetResources: []string{"pods"},
+							Summary:         "can create pods",
+						},
+						{
+							Verb:            "patch",
+							TargetGroup:     "workload-controllers",
+							TargetResources: []string{"deployments", "statefulsets"},
+							Summary:         "can patch workload controllers",
+						},
+						{
+							Verb:            "exec",
+							TargetGroup:     "pods",
+							TargetResources: []string{"pods/exec"},
+							Summary:         "can exec into pods",
+						},
+					},
+					EvidenceStatus: "direct",
+				},
+			},
+		},
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildPermissionsPayload() error = %v", err)
+	}
+
+	rows, ok := payload["permissions"].([]any)
+	if !ok || len(rows) != 3 {
+		t.Fatalf("permissions = %#v, want three exact rows", payload["permissions"])
+	}
+
+	seen := map[string]map[string]any{}
+	for _, row := range rows {
+		mapping := requireMap(t, row)
+		seen[mapping["action_summary"].(string)] = mapping
+	}
+
+	if _, ok := seen["can change workloads"]; ok {
+		t.Fatalf("permissions = %#v, want exact workload rows instead of generic change workloads", rows)
+	}
+	if _, ok := seen["can create pods"]; !ok {
+		t.Fatalf("permissions = %#v, want can create pods", rows)
+	}
+	if _, ok := seen["can patch workload controllers"]; !ok {
+		t.Fatalf("permissions = %#v, want can patch workload controllers", rows)
+	}
+	execRow, ok := seen["can exec into pods"]
+	if !ok {
+		t.Fatalf("permissions = %#v, want can exec into pods", rows)
+	}
+	if execRow["target_group"] != "pods" {
+		t.Fatalf("exec target_group = %v, want pods", execRow["target_group"])
 	}
 }
 

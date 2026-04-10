@@ -24,6 +24,10 @@ var commandContracts = map[string]CommandContract{
 		Model:          "WhoAmIOutput",
 		TopLevelFields: []string{"metadata", "kube_context", "current_identity", "session", "environment_hint", "identity_evidence", "visibility_blockers", "issues"},
 	},
+	"chains": {
+		Model:          "ChainsScaffoldOutput",
+		TopLevelFields: []string{"metadata", "grouped_command_name", "command_state", "current_behavior", "planned_input_modes", "preferred_artifact_order", "selected_family", "families", "issues"},
+	},
 	"inventory": {
 		Model:          "InventoryOutput",
 		TopLevelFields: []string{"metadata", "visibility", "environment", "exposure_footprint", "risky_workload_footprint", "identity_footprint", "next_commands", "kubernetes_counts", "docker_counts", "issues"},

@@ -154,20 +154,40 @@ func deriveImmediatePrivescRows(startingFoothold string, subjectConfidence strin
 				WhyCare:           deriveImmediatePrivescWhyCare("identity-control-immediate", permissionRow),
 				NextReview:        "rbac",
 			})
-		case "can change workloads", "can exec into pods", "can touch nodes", "can change admission or policy":
+		case "can touch nodes", "can change admission or policy":
 			rows = append(rows, model.PrivescPath{
 				ID:                "privesc:" + strings.ReplaceAll(permissionRow.ID, "current-session:", ""),
 				StartingFoothold:  startingFoothold,
 				SubjectConfidence: subjectConfidence,
 				PathClass:         "execution-control-immediate",
 				Action:            permissionRow.ActionSummary,
-				StrongerOutcome:   executionControlOutcome(permissionRow.ActionSummary),
+				StrongerOutcome:   executionControlOutcome(permissionRow),
 				OutcomePower:      permissionRow.ActionSummary,
 				Confidence:        privescRowConfidence(subjectConfidence, "direct"),
 				OperatorSignal:    privescSignalForClass("execution-control-immediate", permissionRow.Priority),
 				Priority:          permissionRow.Priority,
 				WhatIsProven:      fmt.Sprintf("%s can %s in %s now.", startingFoothold, strings.TrimPrefix(permissionRow.ActionSummary, "can "), permissionRow.Scope),
-				WhatIsMissing:     executionControlMissing(permissionRow.ActionSummary),
+				WhatIsMissing:     executionControlMissing(permissionRow),
+				WhyCare:           deriveImmediatePrivescWhyCare("execution-control-immediate", permissionRow),
+				NextReview:        "workloads",
+			})
+		default:
+			if !isImmediateExecutionPermission(permissionRow) {
+				continue
+			}
+			rows = append(rows, model.PrivescPath{
+				ID:                "privesc:" + strings.ReplaceAll(permissionRow.ID, "current-session:", ""),
+				StartingFoothold:  startingFoothold,
+				SubjectConfidence: subjectConfidence,
+				PathClass:         "execution-control-immediate",
+				Action:            permissionRow.ActionSummary,
+				StrongerOutcome:   executionControlOutcome(permissionRow),
+				OutcomePower:      permissionRow.ActionSummary,
+				Confidence:        privescRowConfidence(subjectConfidence, "direct"),
+				OperatorSignal:    privescSignalForClass("execution-control-immediate", permissionRow.Priority),
+				Priority:          permissionRow.Priority,
+				WhatIsProven:      fmt.Sprintf("%s can %s in %s now.", startingFoothold, strings.TrimPrefix(permissionRow.ActionSummary, "can "), permissionRow.Scope),
+				WhatIsMissing:     executionControlMissing(permissionRow),
 				WhyCare:           deriveImmediatePrivescWhyCare("execution-control-immediate", permissionRow),
 				NextReview:        "workloads",
 			})
@@ -348,14 +368,24 @@ func identityControlOutcome(action string) string {
 	}
 }
 
-func executionControlOutcome(action string) string {
-	switch action {
+func executionControlOutcome(permissionRow model.PermissionPath) string {
+	switch permissionRow.ActionSummary {
 	case "can touch nodes":
 		return "host or control-plane adjacent access"
 	case "can change admission or policy":
 		return "disable guardrails and create stronger workloads"
 	case "can exec into pods":
 		return "runtime secret or attached identity access"
+	case "can create pods":
+		return "create a new workload execution foothold"
+	case "can create workload controllers":
+		return "create a new workload-controller foothold"
+	case "can patch workload controllers", "can update workload controllers":
+		return "rewrite existing workload behavior"
+	case "can patch pods", "can update pods":
+		return "change live workload behavior"
+	case "can delete workload controllers", "can delete pods":
+		return "disrupt workload paths and force recovery"
 	default:
 		return "stronger workload execution foothold"
 	}
@@ -372,14 +402,37 @@ func identityControlMissing(action string) string {
 	}
 }
 
-func executionControlMissing(action string) string {
-	switch action {
+func executionControlMissing(permissionRow model.PermissionPath) string {
+	switch permissionRow.ActionSummary {
 	case "can change admission or policy":
 		return "Need exact policy target review to show which guardrail can be removed or reshaped first."
 	case "can touch nodes":
 		return "Need exact node-touching target review to show whether the next move is workload, host, or control-plane adjacent."
+	case "can create pods":
+		return "Need exact namespace target review to show which new pod path is the best next move."
+	case "can create workload controllers":
+		return "Need exact controller target review to show which new workload definition changes the next move fastest."
+	case "can patch workload controllers", "can update workload controllers":
+		return "Need exact workload target review to show which existing controller should be changed first."
+	case "can patch pods", "can update pods":
+		return "Need exact pod target review to show which live workload can be changed first."
+	case "can delete workload controllers", "can delete pods":
+		return "Need exact workload target review to show whether disruption creates a meaningful follow-on path."
 	default:
 		return "Need exact workload target review to show which execution path yields the strongest follow-on foothold."
+	}
+}
+
+func isImmediateExecutionPermission(permissionRow model.PermissionPath) bool {
+	switch permissionRow.ActionSummary {
+	case "can change workloads", "can exec into pods":
+		return true
+	}
+	switch permissionRow.ActionVerb {
+	case "create", "patch", "update", "delete", "exec":
+		return permissionRow.TargetGroup == "pods" || permissionRow.TargetGroup == "workload-controllers"
+	default:
+		return false
 	}
 }
 

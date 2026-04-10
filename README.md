@@ -66,6 +66,13 @@ Typical flow:
 - `service-accounts`: follow workload-linked identity and token paths toward the next useful pivot
 - `privesc`: surface direct abuse or escalation leads rooted in the current access
 
+If identity-path review matters more than edge-first triage:
+
+```bash
+harrierops-kube service-accounts
+harrierops-kube chains
+```
+
 ## Operator Outcome
 
 After one short pass, you understand:
@@ -97,6 +104,7 @@ harrierops-kube workloads
 | --- | --- |
 | `core` | `inventory` |
 | `identity` | `whoami`, `rbac`, `service-accounts`, `permissions`, `privesc` |
+| `orchestration` | `chains` |
 | `workload` | `workloads` |
 | `exposure` | `exposure` |
 | `secrets` | `secrets` |
@@ -131,6 +139,10 @@ HARRIEROPS_KUBE_FIXTURE_DIR=testdata/fixtures/lab_cluster \
 ```
 
 The command surface and output contracts match the operator-facing command set above.
+The `chains` surface is scaffolded now so the first grouped family contract, claim boundary, and
+backing commands are visible before runnable path execution lands. The scaffold now also makes the
+planned row shape, path-type guide, and internal proof ladder visible so future chain wording can
+stay deterministic before family logic ships.
 
 ## CLI Invocation
 
@@ -145,6 +157,7 @@ Examples:
 
 ```bash
 harrierops-kube whoami --output json --outdir ./harrierops-kube-demo
+harrierops-kube chains workload-identity-pivot --output table
 harrierops-kube inventory --context prod-cluster --namespace payments
 harrierops-kube permissions help
 ```

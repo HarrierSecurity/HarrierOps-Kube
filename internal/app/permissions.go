@@ -43,12 +43,24 @@ func buildPermissionsPayload(factProvider provider.Provider, query provider.Quer
 
 type permissionAggregation struct {
 	ActionSummary   string
+	ActionVerb      string
+	TargetGroup     string
+	TargetResources []string
 	Scope           string
 	EvidenceStatus  string
 	RelatedBindings []string
 	GrantScore      int
 	PriorityScore   int
 	WhyCare         string
+	NextReview      string
+}
+
+type permissionActionCandidate struct {
+	ActionSummary   string
+	ActionVerb      string
+	TargetGroup     string
+	TargetResources []string
+	BaseScore       int
 	NextReview      string
 }
 
@@ -73,36 +85,31 @@ func derivePermissionPaths(currentIdentity model.CurrentIdentity, grants []model
 			continue
 		}
 
+		for _, workloadAction := range grant.WorkloadActions {
+			upsertPermissionAggregate(
+				aggregated,
+				permissionCandidateFromWorkloadAction(workloadAction),
+				grant,
+				currentIdentity.Confidence,
+				permissionWorkloadActionPriorityScore(workloadAction, grant.Scope, currentIdentity.Confidence),
+			)
+		}
+
 		for _, dangerousRight := range grant.DangerousRights {
-			actionSummary := permissionActionSummary(dangerousRight)
-			if actionSummary == "" {
+			if len(grant.WorkloadActions) > 0 && (dangerousRight == "change workloads" || dangerousRight == "exec into pods") {
 				continue
 			}
-
-			candidateScore := permissionPriorityScore(dangerousRight, grant.Scope, currentIdentity.Confidence)
-			aggregate := aggregated[actionSummary]
-			if aggregate == nil {
-				aggregate = &permissionAggregation{
-					ActionSummary:   actionSummary,
-					Scope:           grant.Scope,
-					EvidenceStatus:  grant.EvidenceStatus,
-					RelatedBindings: []string{},
-					GrantScore:      providerDangerSignalScore(dangerousRight),
-					PriorityScore:   candidateScore,
-					WhyCare:         derivePermissionWhyCare(actionSummary, grant.Scope, currentIdentity.Confidence),
-					NextReview:      permissionNextReview(dangerousRight),
-				}
-				aggregated[actionSummary] = aggregate
+			candidate, ok := permissionCandidateFromDangerousRight(dangerousRight)
+			if !ok {
+				continue
 			}
-
-			aggregate.RelatedBindings = append(aggregate.RelatedBindings, grant.BindingName)
-			if candidateScore > aggregate.PriorityScore {
-				aggregate.Scope = grant.Scope
-				aggregate.PriorityScore = candidateScore
-				aggregate.GrantScore = providerDangerSignalScore(dangerousRight)
-				aggregate.WhyCare = derivePermissionWhyCare(actionSummary, grant.Scope, currentIdentity.Confidence)
-				aggregate.NextReview = permissionNextReview(dangerousRight)
-			}
+			upsertPermissionAggregate(
+				aggregated,
+				candidate,
+				grant,
+				currentIdentity.Confidence,
+				permissionPriorityScore(dangerousRight, grant.Scope, currentIdentity.Confidence),
+			)
 		}
 	}
 
@@ -114,6 +121,9 @@ func derivePermissionPaths(currentIdentity model.CurrentIdentity, grants []model
 			Subject:           subject,
 			SubjectConfidence: currentIdentity.Confidence,
 			Scope:             aggregate.Scope,
+			ActionVerb:        aggregate.ActionVerb,
+			TargetGroup:       aggregate.TargetGroup,
+			TargetResources:   aggregate.TargetResources,
 			ActionSummary:     aggregate.ActionSummary,
 			EvidenceStatus:    aggregate.EvidenceStatus,
 			RelatedBindings:   aggregate.RelatedBindings,
@@ -216,6 +226,22 @@ func permissionActionScore(actionSummary string) int {
 		return providerDangerSignalScore("admin-like wildcard access")
 	case "can read secrets":
 		return providerDangerSignalScore("read secrets")
+	case "can create pods":
+		return 35
+	case "can create workload controllers":
+		return 32
+	case "can patch workload controllers":
+		return 34
+	case "can update workload controllers":
+		return 33
+	case "can delete workload controllers":
+		return 29
+	case "can patch pods":
+		return 31
+	case "can update pods":
+		return 30
+	case "can delete pods":
+		return 29
 	case "can change workloads":
 		return providerDangerSignalScore("change workloads")
 	case "can exec into pods":
@@ -265,6 +291,58 @@ func permissionPriorityScore(dangerousRight string, scope string, subjectConfide
 	return score
 }
 
+func upsertPermissionAggregate(
+	aggregated map[string]*permissionAggregation,
+	candidate permissionActionCandidate,
+	grant model.RBACGrant,
+	subjectConfidence string,
+	candidateScore int,
+) {
+	aggregate := aggregated[candidate.ActionSummary]
+	if aggregate == nil {
+		aggregate = &permissionAggregation{
+			ActionSummary:   candidate.ActionSummary,
+			ActionVerb:      candidate.ActionVerb,
+			TargetGroup:     candidate.TargetGroup,
+			TargetResources: append([]string(nil), candidate.TargetResources...),
+			Scope:           grant.Scope,
+			EvidenceStatus:  grant.EvidenceStatus,
+			RelatedBindings: []string{},
+			GrantScore:      candidate.BaseScore,
+			PriorityScore:   candidateScore,
+			WhyCare:         derivePermissionWhyCare(candidate.ActionSummary, grant.Scope, subjectConfidence),
+			NextReview:      candidate.NextReview,
+		}
+		aggregated[candidate.ActionSummary] = aggregate
+	}
+
+	aggregate.TargetResources = mergeSortedStrings(aggregate.TargetResources, candidate.TargetResources)
+	aggregate.RelatedBindings = append(aggregate.RelatedBindings, grant.BindingName)
+	if candidateScore <= aggregate.PriorityScore {
+		return
+	}
+
+	aggregate.Scope = grant.Scope
+	aggregate.PriorityScore = candidateScore
+	aggregate.GrantScore = candidate.BaseScore
+	aggregate.WhyCare = derivePermissionWhyCare(candidate.ActionSummary, grant.Scope, subjectConfidence)
+	aggregate.NextReview = candidate.NextReview
+}
+
+func permissionWorkloadActionPriorityScore(action model.WorkloadAction, scope string, subjectConfidence string) int {
+	score := permissionWorkloadActionBaseScore(action)
+	switch scope {
+	case "cluster-wide":
+		score += 35
+	default:
+		score += 10
+	}
+	if subjectConfidence == "inferred" {
+		score -= 10
+	}
+	return score
+}
+
 func permissionScopeRank(scope string) int {
 	if scope == "cluster-wide" {
 		return 2
@@ -285,6 +363,22 @@ func derivePermissionWhyCare(actionSummary string, scope string, subjectConfiden
 			return "Current session already has admin-like control across the cluster, which can shorten the path to broader abuse immediately."
 		case "can read secrets":
 			return fmt.Sprintf("Current session can read secrets in %s right now, which can widen access beyond this foothold.", scope)
+		case "can create pods":
+			return fmt.Sprintf("Current session can create pods in %s right now, which can start a fresh workload path from this foothold.", scope)
+		case "can create workload controllers":
+			return fmt.Sprintf("Current session can create workload controllers in %s right now, which can launch stronger workload paths without waiting on existing pods.", scope)
+		case "can patch workload controllers":
+			return fmt.Sprintf("Current session can patch workload controllers in %s right now, which can rewrite how existing workloads start or run.", scope)
+		case "can update workload controllers":
+			return fmt.Sprintf("Current session can update workload controllers in %s right now, which can replace workload definitions and change what runs next.", scope)
+		case "can delete workload controllers":
+			return fmt.Sprintf("Current session can delete workload controllers in %s right now, which can disrupt or reshape workload paths tied to this namespace.", scope)
+		case "can patch pods":
+			return fmt.Sprintf("Current session can patch pods in %s right now, which can change live workload state without waiting on a new deploy.", scope)
+		case "can update pods":
+			return fmt.Sprintf("Current session can update pods in %s right now, which can change live workload state directly from this foothold.", scope)
+		case "can delete pods":
+			return fmt.Sprintf("Current session can delete pods in %s right now, which can disrupt running workloads and force follow-on recovery paths.", scope)
 		case "can change workloads":
 			return fmt.Sprintf("Current session can change workloads in %s right now, which can turn cluster access into code-execution leverage.", scope)
 		case "can exec into pods":
@@ -323,4 +417,136 @@ func permissionNextReview(dangerousRight string) string {
 	default:
 		return "rbac"
 	}
+}
+
+func permissionNextReviewFromSummary(actionSummary string) string {
+	switch actionSummary {
+	case "has cluster-wide admin-like access":
+		return "privesc"
+	case "can read secrets":
+		return "secrets"
+	case "can bind roles", "can escalate roles", "can touch nodes", "can change admission or policy", "can impersonate serviceaccounts", "can impersonate users", "can impersonate groups", "can impersonate identities":
+		return "privesc"
+	}
+	switch {
+	case strings.HasPrefix(actionSummary, "can create pods"),
+		strings.HasPrefix(actionSummary, "can create workload controllers"),
+		strings.HasPrefix(actionSummary, "can patch workload controllers"),
+		strings.HasPrefix(actionSummary, "can update workload controllers"),
+		strings.HasPrefix(actionSummary, "can delete workload controllers"),
+		strings.HasPrefix(actionSummary, "can patch pods"),
+		strings.HasPrefix(actionSummary, "can update pods"),
+		strings.HasPrefix(actionSummary, "can delete pods"),
+		actionSummary == "can exec into pods":
+		return "workloads"
+	}
+	return "rbac"
+}
+
+func permissionWorkloadActionBaseScore(action model.WorkloadAction) int {
+	switch {
+	case action.Verb == "exec":
+		return 35
+	case action.Verb == "create" && action.TargetGroup == "pods":
+		return 35
+	case action.Verb == "patch" && action.TargetGroup == "workload-controllers":
+		return 34
+	case action.Verb == "update" && action.TargetGroup == "workload-controllers":
+		return 33
+	case action.Verb == "create" && action.TargetGroup == "workload-controllers":
+		return 32
+	case action.Verb == "patch" && action.TargetGroup == "pods":
+		return 31
+	case action.Verb == "update" && action.TargetGroup == "pods":
+		return 30
+	case action.Verb == "delete":
+		return 29
+	default:
+		return 28
+	}
+}
+
+func permissionCandidateFromWorkloadAction(action model.WorkloadAction) permissionActionCandidate {
+	return permissionActionCandidate{
+		ActionSummary:   action.Summary,
+		ActionVerb:      action.Verb,
+		TargetGroup:     action.TargetGroup,
+		TargetResources: append([]string(nil), action.TargetResources...),
+		BaseScore:       permissionWorkloadActionBaseScore(action),
+		NextReview:      permissionNextReviewFromSummary(action.Summary),
+	}
+}
+
+func permissionCandidateFromDangerousRight(dangerousRight string) (permissionActionCandidate, bool) {
+	actionSummary := permissionActionSummary(dangerousRight)
+	if actionSummary == "" {
+		return permissionActionCandidate{}, false
+	}
+
+	return permissionActionCandidate{
+		ActionSummary:   actionSummary,
+		ActionVerb:      permissionActionVerb(actionSummary),
+		TargetGroup:     permissionTargetGroup(actionSummary),
+		TargetResources: permissionTargetResources(actionSummary),
+		BaseScore:       providerDangerSignalScore(dangerousRight),
+		NextReview:      permissionNextReview(dangerousRight),
+	}, true
+}
+
+func permissionActionVerb(actionSummary string) string {
+	switch {
+	case strings.HasPrefix(actionSummary, "can "):
+		parts := strings.Fields(strings.TrimPrefix(actionSummary, "can "))
+		if len(parts) > 0 {
+			return parts[0]
+		}
+	case strings.HasPrefix(actionSummary, "has "):
+		return "admin"
+	}
+	return ""
+}
+
+func permissionTargetGroup(actionSummary string) string {
+	switch {
+	case strings.Contains(actionSummary, "workload controllers"):
+		return "workload-controllers"
+	case strings.Contains(actionSummary, "pods"):
+		return "pods"
+	default:
+		return ""
+	}
+}
+
+func permissionTargetResources(actionSummary string) []string {
+	switch actionSummary {
+	case "can exec into pods":
+		return []string{"pods/exec"}
+	case "can create pods", "can patch pods", "can update pods", "can delete pods":
+		return []string{"pods"}
+	case "can create workload controllers", "can patch workload controllers", "can update workload controllers", "can delete workload controllers":
+		return []string{"cronjobs", "daemonsets", "deployments", "jobs", "statefulsets"}
+	default:
+		return nil
+	}
+}
+
+func mergeSortedStrings(existing []string, additions []string) []string {
+	seen := map[string]struct{}{}
+	merged := make([]string, 0, len(existing)+len(additions))
+	for _, item := range existing {
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		merged = append(merged, item)
+	}
+	for _, item := range additions {
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		merged = append(merged, item)
+	}
+	sort.Strings(merged)
+	return merged
 }

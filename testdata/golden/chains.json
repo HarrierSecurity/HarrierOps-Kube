@@ -1,0 +1,169 @@
+{
+  "command_state": "scaffold",
+  "current_behavior": "Family overview and grouped scaffold. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to inspect one family contract before runnable chain execution lands.",
+  "families": [
+    {
+      "allowed_claim": "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, or stronger control without the explicit control edge and confirmation basis.",
+      "best_current_examples": [
+        "workloads -> service-accounts -> permissions",
+        "workloads -> service-accounts -> privesc",
+        "secrets -> workloads -> service-accounts"
+      ],
+      "current_gap": "The scaffold is in place, but the runnable family still needs registry-backed handlers, proof-light evaluation, and defended rows that keep internal proof states separate from operator-facing path wording.",
+      "family": "workload-identity-pivot",
+      "internal_proof_ladder": [
+        {
+          "meaning": "The workload-linked clue is real enough to keep on screen, but the stronger identity or usable action is not yet confirmed.",
+          "state": "visible"
+        },
+        {
+          "meaning": "The workload, attached service account, and stronger downstream control are clear, but the current session's practical workload-side action is not yet confirmed.",
+          "state": "target-confirmed"
+        },
+        {
+          "meaning": "The workload-side action, attached service account, and stronger downstream control connect strongly enough to treat the row as a real path.",
+          "state": "path-confirmed"
+        },
+        {
+          "meaning": "Current scope does not show enough evidence to keep the row as an honest workload-identity path.",
+          "state": "blocked"
+        }
+      ],
+      "meaning": "A current foothold can likely influence a workload or workload-linked service account that already carries stronger downstream control.",
+      "path_type_guide": [
+        {
+          "default_next_review": "permissions",
+          "meaning": "Current access likely lets the operator change or enter the workload, and the attached service account already changes the next move.",
+          "name": "direct control visible",
+          "priority_intent": "highest-value default row type"
+        },
+        {
+          "default_next_review": "workloads",
+          "meaning": "The workload-linked service account path is visible and meaningful, but the stronger control story still depends on deeper workload-side validation.",
+          "name": "workload pivot",
+          "priority_intent": "below direct control visible, above visibility-limited rows"
+        },
+        {
+          "default_next_review": "service-accounts",
+          "meaning": "The attached service account looks stronger, but current access does not yet prove the workload-side action that would make the path immediate.",
+          "name": "direct control not confirmed",
+          "priority_intent": "mid-tier row type when the stronger identity is clear but the action edge is not"
+        },
+        {
+          "default_next_review": "permissions",
+          "meaning": "A real workload-linked identity clue survives, but current scope does not confirm enough of the stronger path to raise it honestly.",
+          "name": "visibility blocked",
+          "priority_intent": "lowest default row type unless the blocked clue still carries unusually strong operator value"
+        }
+      ],
+      "planned_row_shape": [
+        "priority",
+        "workload",
+        "subversion_point",
+        "path_type",
+        "likely_kubernetes_control",
+        "urgency",
+        "why_stop_here",
+        "confidence_boundary",
+        "next_review"
+      ],
+      "source_commands": [
+        {
+          "command": "workloads",
+          "minimum_fields": [
+            "id",
+            "name",
+            "namespace",
+            "service_account_name",
+            "related_exposures",
+            "public_exposure",
+            "service_account_power",
+            "priority"
+          ],
+          "rationale": "Provides the workload-side insertion point, exposure context, and the attached service account that could change the next move."
+        },
+        {
+          "command": "service-accounts",
+          "minimum_fields": [
+            "id",
+            "name",
+            "namespace",
+            "related_workloads",
+            "exposed_workloads",
+            "power_summary",
+            "token_posture",
+            "priority"
+          ],
+          "rationale": "Provides the workload-linked identity anchor, reuse breadth, token posture, and the concrete power that makes the service account worth chaining."
+        },
+        {
+          "command": "permissions",
+          "minimum_fields": [
+            "id",
+            "subject",
+            "action_summary",
+            "scope",
+            "evidence_status",
+            "related_bindings",
+            "priority",
+            "next_review"
+          ],
+          "rationale": "Provides the current-session action edge when the present foothold can already drive workload or identity change."
+        },
+        {
+          "command": "privesc",
+          "minimum_fields": [
+            "id",
+            "starting_foothold",
+            "path_class",
+            "action",
+            "stronger_outcome",
+            "confidence",
+            "operator_signal",
+            "what_is_proven",
+            "what_is_missing",
+            "next_review"
+          ],
+          "rationale": "Provides the current-foothold escalation cues that the first chain family can harden into a defended workload-linked path story."
+        },
+        {
+          "command": "secrets",
+          "minimum_fields": [
+            "id",
+            "secret_story",
+            "source_surface",
+            "subject",
+            "related_workloads",
+            "direct_use_confidence",
+            "trust_path",
+            "operator_signal",
+            "priority",
+            "next_review"
+          ],
+          "rationale": "Provides secret-bearing trust paths that can corroborate why a workload-linked identity path matters now versus later."
+        }
+      ],
+      "state": "planned",
+      "summary": "Follow the shortest visible workload-to-identity pivot toward stronger service-account-backed Kubernetes control."
+    }
+  ],
+  "grouped_command_name": "chains",
+  "issues": [],
+  "metadata": {
+    "cluster_name": null,
+    "command": "chains",
+    "context_name": null,
+    "docker_context": null,
+    "generated_at": "<generated_at>",
+    "namespace": null,
+    "schema_version": "1.0.0"
+  },
+  "planned_input_modes": [
+    "live",
+    "artifacts"
+  ],
+  "preferred_artifact_order": [
+    "loot",
+    "json"
+  ]
+}

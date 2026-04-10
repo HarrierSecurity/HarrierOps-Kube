@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"harrierops-kube/internal/chains"
 	"harrierops-kube/internal/contracts"
 	"harrierops-kube/internal/model"
 	"harrierops-kube/internal/output"
@@ -38,6 +39,7 @@ type CommandSpec struct {
 
 var commandSpecs = []CommandSpec{
 	{Name: "whoami", Section: "identity", Status: "implemented"},
+	{Name: "chains", Section: "orchestration", Status: "implemented"},
 	{Name: "inventory", Section: "core", Status: "implemented"},
 	{Name: "rbac", Section: "identity", Status: "implemented"},
 	{Name: "service-accounts", Section: "identity", Status: "implemented"},
@@ -90,15 +92,25 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, env []string) int {
 		return 0
 	}
 
-	options, remaining, err := parseRootOptions(args[1:], stderr, env)
+	selectedFamily := ""
+	parseArgs := args[1:]
+	if command == chains.GroupedCommandName && len(args) > 1 && !isFlagToken(args[1]) {
+		selectedFamily = args[1]
+		parseArgs = args[2:]
+	}
+
+	options, remaining, err := parseRootOptions(parseArgs, stderr, env)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 2
 	}
 
 	if len(remaining) > 0 {
-		fmt.Fprintf(stderr, "unexpected arguments after command %q: %s\n", command, strings.Join(remaining, " "))
-		return 2
+		if command != chains.GroupedCommandName || selectedFamily != "" || len(remaining) > 1 {
+			fmt.Fprintf(stderr, "unexpected arguments after command %q: %s\n", command, strings.Join(remaining, " "))
+			return 2
+		}
+		selectedFamily = remaining[0]
 	}
 
 	if spec.Status != "implemented" {
@@ -106,7 +118,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, env []string) int {
 		return 2
 	}
 
-	return runSingleCommand(options, command, stdout, stderr)
+	return runSingleCommand(options, command, selectedFamily, stdout, stderr)
 }
 
 func parseRootOptions(args []string, stderr io.Writer, env []string) (Options, []string, error) {
@@ -161,8 +173,8 @@ func trimFlagPrefix(token string) string {
 	return strings.TrimLeft(token, "-")
 }
 
-func runSingleCommand(options Options, command string, stdout io.Writer, stderr io.Writer) int {
-	payload, err := buildCommandPayload(command, options)
+func runSingleCommand(options Options, command string, selectedFamily string, stdout io.Writer, stderr io.Writer) int {
+	payload, err := buildCommandPayload(command, options, selectedFamily)
 	if err != nil {
 		writeError(stderr, err, options.Debug)
 		return 2
@@ -189,7 +201,16 @@ func runSingleCommand(options Options, command string, stdout io.Writer, stderr 
 	return 0
 }
 
-func buildCommandPayload(command string, options Options) (map[string]any, error) {
+func buildCommandPayload(command string, options Options, selection ...string) (map[string]any, error) {
+	selectedFamily := ""
+	if len(selection) > 0 {
+		selectedFamily = selection[0]
+	}
+
+	if command == chains.GroupedCommandName {
+		return buildChainsPayload(selectedFamily)
+	}
+
 	factProvider, err := provider.NewFixtureProvider(options.FixtureDir)
 	if err != nil {
 		return nil, err
@@ -315,6 +336,7 @@ func resolveFixtureDir(env []string) string {
 func usageText() string {
 	return strings.Join([]string{
 		"usage: harrierops-kube <command> [global options]",
+		"       harrierops-kube chains [family] [global options]",
 		"       harrierops-kube <command> help",
 		"",
 		commandListLine("implemented commands", commandNamesWithStatus("implemented")),

@@ -3,6 +3,8 @@ package provider
 import (
 	"path/filepath"
 	"testing"
+
+	"harrierops-kube/internal/model"
 )
 
 func TestMetadataContextUsesWhoAmIFixtureDefaults(t *testing.T) {
@@ -136,6 +138,14 @@ func TestRBACBindingsDecodeNormalizedGrantRows(t *testing.T) {
 	if len(first.DangerousRights) == 0 || first.DangerousRights[0] != "admin-like wildcard access" {
 		t.Fatalf("DangerousRights = %#v, want admin-like wildcard access first", first.DangerousRights)
 	}
+
+	second := data.RoleGrants[1]
+	if !containsWorkloadAction(second.WorkloadActions, "can create pods") {
+		t.Fatalf("WorkloadActions = %#v, want can create pods on edit role", second.WorkloadActions)
+	}
+	if !containsWorkloadAction(second.WorkloadActions, "can patch workload controllers") {
+		t.Fatalf("WorkloadActions = %#v, want can patch workload controllers on edit role", second.WorkloadActions)
+	}
 }
 
 func TestRBACBindingsLiftImpersonateSignals(t *testing.T) {
@@ -217,6 +227,15 @@ func absPath(t *testing.T, path string) string {
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsWorkloadAction(values []model.WorkloadAction, want string) bool {
+	for _, value := range values {
+		if value.Summary == want {
 			return true
 		}
 	}
