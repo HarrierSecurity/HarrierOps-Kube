@@ -85,7 +85,7 @@ func buildWorkloadIdentityPivotRows(inputs WorkloadIdentityPivotInputs) []model.
 	rows = append(rows, buildReadSecretsRows(inputs, workloadByLabel, serviceAccountByKey)...)
 	rows = append(rows, buildSwitchServiceAccountRows(inputs, workloadByNamespace, serviceAccountByKey)...)
 	rows = append(rows, buildPatchSpecificSurfaceRows(inputs, workloadByNamespace, serviceAccountByKey)...)
-	rows = append(rows, buildTokenPathVisibleRows(inputs, workloadByLabel, serviceAccountByKey)...)
+	rows = append(rows, buildTokenPathVisibleRows(inputs, workloadByLabel)...)
 	return rows
 }
 
@@ -227,7 +227,6 @@ func buildReadSecretsRows(
 func buildTokenPathVisibleRows(
 	inputs WorkloadIdentityPivotInputs,
 	workloadByLabel map[string]model.WorkloadPath,
-	serviceAccountByKey map[string]model.ServiceAccountPath,
 ) []model.ChainPathRecord {
 	rows := []model.ChainPathRecord{}
 	for _, serviceAccount := range inputs.ServiceAccounts {
@@ -309,62 +308,66 @@ func buildPatchSpecificSurfaceRows(
 		}
 
 		best, seen := bestPatchPermissionByNamespace[namespace]
-		if !seen || exactPatchSurfacePermissionScore(permission) > exactPatchSurfacePermissionScore(best) {
+		if !seen || workloadChangePermissionScore(permission) > workloadChangePermissionScore(best) {
 			bestPatchPermissionByNamespace[namespace] = permission
 		}
 	}
 
+	namespaces := sortedStringKeys(bestPatchPermissionByNamespace)
 	rows := []model.ChainPathRecord{}
-	for namespace, permission := range bestPatchPermissionByNamespace {
-		workload, serviceAccount, ok := strongestWorkloadForPatchSurface(namespace, "env", workloadByNamespace, serviceAccountByKey)
-		if !ok {
-			continue
-		}
+	for _, namespace := range namespaces {
+		permission := bestPatchPermissionByNamespace[namespace]
+		for _, surface := range exactPatchSurfaceCandidates() {
+			workload, serviceAccount, ok := strongestWorkloadForPatchSurface(namespace, surface, workloadByNamespace, serviceAccountByKey)
+			if !ok {
+				continue
+			}
 
-		visibility, ok := ClassifyWorkloadIdentityVisibility(WorkloadIdentityVisibilityInputs{
-			WorkloadVisible:         true,
-			SubversionPointVisible:  true,
-			AttachedIdentityVisible: workload.ServiceAccountName != "",
-			StrongerControlVisible:  serviceAccount.PowerSummary != "",
-			VisibleChangeSurfaces:   true,
-			ExactBlockerKnown:       true,
-			NextReviewSet:           true,
-		})
-		if !ok {
-			continue
-		}
+			visibility, ok := ClassifyWorkloadIdentityVisibility(WorkloadIdentityVisibilityInputs{
+				WorkloadVisible:         true,
+				SubversionPointVisible:  true,
+				AttachedIdentityVisible: workload.ServiceAccountName != "",
+				StrongerControlVisible:  serviceAccount.PowerSummary != "",
+				VisibleChangeSurfaces:   true,
+				ExactBlockerKnown:       true,
+				NextReviewSet:           true,
+			})
+			if !ok {
+				continue
+			}
 
-		confidenceBoundary, boundaryOK := FormatWorkloadPatchConfidenceBoundary(workload.VisiblePatchSurfaces)
-		decision := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
-			Kind:                        WorkloadIdentityRowPatchSpecificSurface,
-			ExactActionProven:           true,
-			VisibleSurface:              "env",
-			VisibilityTier:              visibility.Tier,
-			ConfidenceBoundaryAvailable: boundaryOK,
-		})
-		if !decision.AllowedDefault || visibility.SuppressDefault {
-			continue
-		}
+			confidenceBoundary, boundaryOK := FormatWorkloadPatchConfidenceBoundary(workloadPatchRelevantFields(workload))
+			decision := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowPatchSpecificSurface,
+				ExactActionProven:           true,
+				VisibleSurface:              surface,
+				VisibilityTier:              visibility.Tier,
+				ConfidenceBoundaryAvailable: boundaryOK,
+			})
+			if !decision.AllowedDefault || visibility.SuppressDefault {
+				continue
+			}
 
-		rows = append(rows, model.ChainPathRecord{
-			ChainID:                 "workload-identity-pivot:patch-env:" + namespace + ":" + workload.Name,
-			Priority:                workload.Priority,
-			InternalProofState:      "path-confirmed",
-			VisibilityTier:          visibility.Tier,
-			PathType:                "direct control visible",
-			StartingFoothold:        inputs.StartingFoothold,
-			SourceAsset:             workload.Namespace + "/" + workload.Name,
-			SourceNamespace:         workload.Namespace,
-			SubversionPoint:         exactPatchSurfaceSubversionPoint(permission.ActionVerb, workload.Namespace+"/"+workload.Name, "env"),
-			LikelyKubernetesControl: "attached service account " + serviceAccount.PowerSummary,
-			Urgency:                 "now",
-			WhyStopHere:             WorkloadPatchWhyStopHere(),
-			ConfidenceBoundary:      confidenceBoundary,
-			NextReview:              "workloads",
-			Summary:                 visibility.OperatorWording,
-			EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
-			RelatedIDs:              []string{permission.ID, workload.ID, serviceAccount.ID},
-		})
+			rows = append(rows, model.ChainPathRecord{
+				ChainID:                 "workload-identity-pivot:patch-" + exactPatchSurfaceChainIDPart(surface) + ":" + namespace + ":" + workload.Name,
+				Priority:                workload.Priority,
+				InternalProofState:      "path-confirmed",
+				VisibilityTier:          visibility.Tier,
+				PathType:                "direct control visible",
+				StartingFoothold:        inputs.StartingFoothold,
+				SourceAsset:             workload.Namespace + "/" + workload.Name,
+				SourceNamespace:         workload.Namespace,
+				SubversionPoint:         exactPatchSurfaceSubversionPoint(permission.ActionVerb, workload.Namespace+"/"+workload.Name, surface),
+				LikelyKubernetesControl: "attached service account " + serviceAccount.PowerSummary,
+				Urgency:                 "now",
+				WhyStopHere:             WorkloadPatchWhyStopHere(),
+				ConfidenceBoundary:      confidenceBoundary,
+				NextReview:              "workloads",
+				Summary:                 visibility.OperatorWording,
+				EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
+				RelatedIDs:              []string{permission.ID, workload.ID, serviceAccount.ID},
+			})
+		}
 	}
 
 	return rows
@@ -386,7 +389,7 @@ func buildSwitchServiceAccountRows(
 		}
 
 		best, seen := bestPermissionByNamespace[namespace]
-		if !seen || exactPatchSurfacePermissionScore(permission) > exactPatchSurfacePermissionScore(best) {
+		if !seen || workloadChangePermissionScore(permission) > workloadChangePermissionScore(best) {
 			bestPermissionByNamespace[namespace] = permission
 		}
 	}
@@ -849,6 +852,22 @@ func permissionSupportsExactWorkloadPatchSurface(permission model.PermissionPath
 	}
 }
 
+func exactPatchSurfaceCandidates() []string {
+	return []string{
+		"image",
+		"command",
+		"args",
+		"env",
+		"mounted secret refs",
+		"mounted config refs",
+		"init containers",
+	}
+}
+
+func exactPatchSurfaceChainIDPart(surface string) string {
+	return strings.ReplaceAll(surface, " ", "-")
+}
+
 func permissionSupportsServiceAccountRepointing(permission model.PermissionPath) bool {
 	switch permission.TargetGroup {
 	case "pods", "workload-controllers":
@@ -863,7 +882,7 @@ func permissionSupportsServiceAccountRepointing(permission model.PermissionPath)
 	}
 }
 
-func exactPatchSurfacePermissionScore(permission model.PermissionPath) int {
+func workloadChangePermissionScore(permission model.PermissionPath) int {
 	switch permission.ActionVerb {
 	case "patch":
 		return 2
@@ -875,12 +894,19 @@ func exactPatchSurfacePermissionScore(permission model.PermissionPath) int {
 }
 
 func workloadHasVisiblePatchSurface(workload model.WorkloadPath, surface string) bool {
-	for _, visibleSurface := range workload.VisiblePatchSurfaces {
+	for _, visibleSurface := range workloadPatchRelevantFields(workload) {
 		if visibleSurface == surface {
 			return true
 		}
 	}
 	return false
+}
+
+func workloadPatchRelevantFields(workload model.WorkloadPath) []string {
+	if len(workload.PatchRelevantFields) > 0 {
+		return workload.PatchRelevantFields
+	}
+	return workload.VisiblePatchSurfaces
 }
 
 func exactPatchSurfaceSubversionPoint(actionVerb string, workloadLabel string, surface string) string {
@@ -917,6 +943,15 @@ func boundedServiceAccountControlSummary(candidates []model.ServiceAccountPath) 
 		return "stronger visible service-account paths are present in this namespace"
 	}
 	return "visible replacement identities include " + strings.Join(summaries, ", ")
+}
+
+func sortedStringKeys[T any](mapping map[string]T) []string {
+	keys := make([]string, 0, len(mapping))
+	for key := range mapping {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func triageScore(priority string) int {

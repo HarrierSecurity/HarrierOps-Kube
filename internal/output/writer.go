@@ -104,167 +104,48 @@ func marshalLoot(command string, payload map[string]any) ([]byte, error) {
 		return json.MarshalIndent(lootPayload, "", "  ")
 	}
 	if command == "inventory" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{
-			"metadata",
-			"visibility",
-			"environment",
-			"exposure_footprint",
-			"risky_workload_footprint",
-			"identity_footprint",
-			"next_commands",
-			"issues",
-		} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "visibility", "environment", "exposure_footprint", "risky_workload_footprint", "identity_footprint", "next_commands", "issues")
 	}
 	if command == "rbac" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{"metadata", "issues"} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "issues")
 		if grants, err := rowsForKey(payload, "role_grants"); err == nil {
-			selected := make([]map[string]any, 0, len(grants))
-			for _, grant := range grants {
-				if stringify(grant["priority"]) == "high" {
-					selected = append(selected, grant)
-				}
-			}
-			if len(selected) == 0 && len(grants) > 0 {
-				limit := min(3, len(grants))
-				selected = append(selected, grants[:limit]...)
-			}
-			lootPayload["role_grants"] = selected
+			lootPayload["role_grants"] = selectLootRows(grants)
 		}
 	}
 	if command == "service-accounts" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{"metadata", "findings", "issues"} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "findings", "issues")
 		if serviceAccounts, err := rowsForKey(payload, "service_accounts"); err == nil {
-			selected := make([]map[string]any, 0, len(serviceAccounts))
-			for _, row := range serviceAccounts {
-				if stringify(row["priority"]) == "high" {
-					selected = append(selected, row)
-				}
-			}
-			if len(selected) == 0 && len(serviceAccounts) > 0 {
-				limit := min(3, len(serviceAccounts))
-				selected = append(selected, serviceAccounts[:limit]...)
-			}
-			lootPayload["service_accounts"] = selected
+			lootPayload["service_accounts"] = selectLootRows(serviceAccounts)
 		}
 	}
 	if command == "workloads" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{"metadata", "findings", "issues"} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "findings", "issues")
 		if workloads, err := rowsForKey(payload, "workload_assets"); err == nil {
-			selected := make([]map[string]any, 0, len(workloads))
-			for _, row := range workloads {
-				if stringify(row["priority"]) == "high" {
-					selected = append(selected, row)
-				}
-			}
-			if len(selected) == 0 && len(workloads) > 0 {
-				limit := min(3, len(workloads))
-				selected = append(selected, workloads[:limit]...)
-			}
-			lootPayload["workload_assets"] = selected
+			lootPayload["workload_assets"] = selectLootRows(workloads)
 		}
 	}
 	if command == "exposure" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{"metadata", "findings", "issues"} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "findings", "issues")
 		if exposures, err := rowsForKey(payload, "exposure_assets"); err == nil {
-			selected := make([]map[string]any, 0, len(exposures))
-			for _, row := range exposures {
-				if stringify(row["priority"]) == "high" {
-					selected = append(selected, row)
-				}
-			}
-			if len(selected) == 0 && len(exposures) > 0 {
-				limit := min(3, len(exposures))
-				selected = append(selected, exposures[:limit]...)
-			}
-			lootPayload["exposure_assets"] = selected
+			lootPayload["exposure_assets"] = selectLootRows(exposures)
 		}
 	}
 	if command == "permissions" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{"metadata", "issues"} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "issues")
 		if permissions, err := rowsForKey(payload, "permissions"); err == nil {
-			selected := make([]map[string]any, 0, len(permissions))
-			for _, row := range permissions {
-				if stringify(row["priority"]) == "high" {
-					selected = append(selected, row)
-				}
-			}
-			if len(selected) == 0 && len(permissions) > 0 {
-				limit := min(3, len(permissions))
-				selected = append(selected, permissions[:limit]...)
-			}
-			lootPayload["permissions"] = selected
+			lootPayload["permissions"] = selectLootRows(permissions)
 		}
 	}
 	if command == "secrets" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{"metadata", "issues"} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "issues")
 		if secretPaths, err := rowsForKey(payload, "secret_paths"); err == nil {
-			selected := make([]map[string]any, 0, len(secretPaths))
-			for _, row := range secretPaths {
-				if stringify(row["priority"]) == "high" {
-					selected = append(selected, row)
-				}
-			}
-			if len(selected) == 0 && len(secretPaths) > 0 {
-				limit := min(3, len(secretPaths))
-				selected = append(selected, secretPaths[:limit]...)
-			}
-			lootPayload["secret_paths"] = selected
+			lootPayload["secret_paths"] = selectLootRows(secretPaths)
 		}
 	}
 	if command == "privesc" {
-		lootPayload = map[string]any{}
-		for _, key := range []string{"metadata", "issues"} {
-			if value, ok := payload[key]; ok {
-				lootPayload[key] = value
-			}
-		}
+		lootPayload = selectLootFields(payload, "metadata", "issues")
 		if escalationPaths, err := rowsForKey(payload, "escalation_paths"); err == nil {
-			selected := make([]map[string]any, 0, len(escalationPaths))
-			for _, row := range escalationPaths {
-				if stringify(row["priority"]) == "high" {
-					selected = append(selected, row)
-				}
-			}
-			if len(selected) == 0 && len(escalationPaths) > 0 {
-				limit := min(3, len(escalationPaths))
-				selected = append(selected, escalationPaths[:limit]...)
-			}
-			lootPayload["escalation_paths"] = selected
+			lootPayload["escalation_paths"] = selectLootRows(escalationPaths)
 		}
 	}
 
@@ -398,7 +279,7 @@ func renderKeyValueTable(payload map[string]any) (string, error) {
 	for _, key := range keys {
 		records = append(records, []string{key, stringify(payload[key])})
 	}
-	return renderSimpleTable([]string{"field", "value"}, records)
+	return renderSimpleTableWithLipgloss([]string{"field", "value"}, records)
 }
 
 func renderChainsTable(payload map[string]any) (string, error) {
@@ -462,8 +343,9 @@ func renderChainsFamilyTable(payload map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	header := renderChainsFamilyHeader(payload)
 	if len(rows) == 0 {
-		return renderTriageEmptyState(payload, "No bounded workload-identity pivot rows were confirmed from current scope."), nil
+		return header + "\n\n" + renderTriageEmptyState(payload, "No bounded workload-identity pivot rows were confirmed from current scope."), nil
 	}
 
 	records := make([]detailTableRecord, 0, len(rows))
@@ -498,7 +380,7 @@ func renderChainsFamilyTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	rendered, err := renderDetailedTriageTable(
+	rendered, err := renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "workload", "subversion point", "path type", "kubernetes control", "visibility", "next review"},
 		records,
@@ -509,7 +391,23 @@ func renderChainsFamilyTable(payload map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "harrierops-kube chains\n\n" + rendered, nil
+	return header + "\n\n" + rendered, nil
+}
+
+func renderChainsFamilyHeader(payload map[string]any) string {
+	title := "harrierops-kube chains"
+	if family := stringify(payload["family"]); family != "" {
+		title += " " + family
+	}
+
+	lines := []string{title}
+	if summary := stringify(payload["summary"]); summary != "" {
+		lines = append(lines, "Summary: "+summary)
+	}
+	if backingCommands := stringifyAnySlice(payload["backing_commands"], ", "); backingCommands != "" {
+		lines = append(lines, "Backing commands: "+backingCommands)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func renderWhoAmITable(payload map[string]any) (string, error) {
@@ -588,7 +486,7 @@ func renderWhoAmITable(payload map[string]any) (string, error) {
 	for _, row := range rows {
 		records = append(records, []string{row[0], row[1]})
 	}
-	return renderSimpleTable([]string{"field", "value"}, records)
+	return renderSimpleTableWithLipgloss([]string{"field", "value"}, records)
 }
 
 func renderInventoryTable(payload map[string]any) (string, error) {
@@ -681,7 +579,7 @@ func renderInventoryTable(payload map[string]any) (string, error) {
 	for _, row := range rows {
 		records = append(records, []string{row[0], row[1]})
 	}
-	return renderSimpleTable([]string{"field", "value"}, records)
+	return renderSimpleTableWithLipgloss([]string{"field", "value"}, records)
 }
 
 func renderRBACTable(payload map[string]any) (string, error) {
@@ -716,7 +614,7 @@ func renderRBACTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	return renderDetailedTriageTable(
+	return renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "scope", "subject", "role", "binding", "signal"},
 		records,
@@ -761,7 +659,7 @@ func renderServiceAccountsTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	return renderDetailedTriageTable(
+	return renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "service_account", "workloads", "power", "token_posture"},
 		records,
@@ -861,7 +759,7 @@ func renderExposureTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	return renderDetailedTriageTable(
+	return renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "exposure", "targets", "attribution", "backend"},
 		records,
@@ -896,7 +794,7 @@ func renderPermissionsTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	return renderDetailedTriageTable(
+	return renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "subject", "confidence", "source", "action", "scope", "next_review"},
 		records,
@@ -945,7 +843,7 @@ func renderSecretsTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	return renderDetailedTriageTable(
+	return renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "story", "path", "linkage", "target"},
 		records,
@@ -982,7 +880,7 @@ func renderPrivescTable(payload map[string]any) (string, error) {
 		})
 	}
 
-	return renderDetailedTriageTable(
+	return renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "class", "foothold", "action", "outcome"},
 		records,
@@ -1236,7 +1134,7 @@ func renderDetailedTriageTableWithLipgloss(payload map[string]any, headers []str
 
 func renderTriageEmptyState(payload map[string]any, emptyMessage string) string {
 	var builder strings.Builder
-	rendered, err := renderSimpleTable([]string{"info"}, [][]string{{emptyMessage}})
+	rendered, err := renderSimpleTableWithLipgloss([]string{"info"}, [][]string{{emptyMessage}})
 	if err == nil {
 		builder.WriteString(rendered)
 	}
@@ -1250,11 +1148,20 @@ func appendIssueSection(builder *strings.Builder, payload map[string]any) {
 		return
 	}
 
-	builder.WriteString("\nIssues:\n")
+	records := make([][]string, 0, len(issues))
 	for _, issue := range issues {
-		builder.WriteString("- ")
-		builder.WriteString(formatIssue(issue))
-		builder.WriteString("\n")
+		records = append(records, []string{formatIssue(issue)})
+	}
+
+	rendered, err := renderSimpleTableWithLipgloss([]string{"Issues"}, records)
+	if err != nil {
+		return
+	}
+
+	builder.WriteByte('\n')
+	builder.WriteString(rendered)
+	if !strings.HasSuffix(rendered, "\n") {
+		builder.WriteByte('\n')
 	}
 }
 
@@ -1334,6 +1241,19 @@ func renderSimpleTable(headers []string, records [][]string) (string, error) {
 	return builder.String(), nil
 }
 
+func renderSimpleTableWithLipgloss(headers []string, records [][]string) (string, error) {
+	if len(headers) == 0 {
+		return "", nil
+	}
+
+	widths := boundedASCIIWidths(headers, records)
+	table := newStandardLipglossTable(widths).Headers(headers...)
+	for _, record := range records {
+		table.Row(record...)
+	}
+	return table.String(), nil
+}
+
 func renderUnicodeTable(headers []string, widths []int, records [][]string) string {
 	var builder strings.Builder
 	builder.WriteString(unicodeTableBorder(widths, '┏', '┳', '┓', '━'))
@@ -1403,7 +1323,7 @@ func renderDetailedRecordTableWithLipgloss(headers []string, widths []int, recor
 	}
 
 	var builder strings.Builder
-	builder.WriteString(newDetailedRecordLipglossTable(widths).Headers(headers...).Row(record...).String())
+	builder.WriteString(newStandardLipglossTable(widths).Headers(headers...).Row(record...).String())
 	if detail == "" {
 		return builder.String(), nil
 	}
@@ -1413,7 +1333,7 @@ func renderDetailedRecordTableWithLipgloss(headers []string, widths []int, recor
 	return builder.String(), nil
 }
 
-func newDetailedRecordLipglossTable(widths []int) *liptable.Table {
+func newStandardLipglossTable(widths []int) *liptable.Table {
 	return liptable.New().
 		Border(lipgloss.ASCIIBorder()).
 		BorderTop(true).
@@ -1460,6 +1380,30 @@ func lipglossCellWidth(contentWidth int) int {
 		return 0
 	}
 	return contentWidth + 2
+}
+
+func selectLootFields(payload map[string]any, keys ...string) map[string]any {
+	lootPayload := map[string]any{}
+	for _, key := range keys {
+		if value, ok := payload[key]; ok {
+			lootPayload[key] = value
+		}
+	}
+	return lootPayload
+}
+
+func selectLootRows(rows []map[string]any) []map[string]any {
+	selected := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		if stringify(row["priority"]) == "high" {
+			selected = append(selected, row)
+		}
+	}
+	if len(selected) == 0 && len(rows) > 0 {
+		limit := min(3, len(rows))
+		selected = append(selected, rows[:limit]...)
+	}
+	return selected
 }
 
 func asciiTableBorder(widths []int) string {

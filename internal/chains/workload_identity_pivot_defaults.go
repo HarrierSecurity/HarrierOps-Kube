@@ -189,9 +189,20 @@ func EvaluateWorkloadIdentityDefaultRow(inputs WorkloadIdentityDefaultRowInputs)
 }
 
 func eligibleWorkloadPatchSurface(surface string) bool {
-	// V1 exact patch rows are intentionally env-only even though the workload model carries more visible surfaces.
 	switch surface {
+	case "image":
+		return true
+	case "command":
+		return true
+	case "args":
+		return true
 	case "env":
+		return true
+	case "mounted secret refs":
+		return true
+	case "mounted config refs":
+		return true
+	case "init containers":
 		return true
 	default:
 		return false

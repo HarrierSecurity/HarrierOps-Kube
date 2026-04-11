@@ -5,25 +5,32 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"harrierops-kube/internal/testutil"
 )
 
-func normalizedWriterText(text string) string {
-	lines := strings.Split(text, "\n")
-	parts := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+func assertUniformTableWidth(t *testing.T, rendered string) {
+	t.Helper()
+
+	tableWidth := 0
+	sawTableLine := false
+	for _, line := range strings.Split(rendered, "\n") {
+		if !strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "|") {
 			continue
 		}
-		if strings.Trim(trimmed, "+-|") == "" {
+		sawTableLine = true
+		lineWidth := lipgloss.Width(line)
+		if tableWidth == 0 {
+			tableWidth = lineWidth
 			continue
 		}
-		trimmed = strings.TrimPrefix(trimmed, "|")
-		trimmed = strings.TrimSuffix(trimmed, "|")
-		trimmed = strings.ReplaceAll(trimmed, "|", " ")
-		parts = append(parts, trimmed)
+		if lineWidth != tableWidth {
+			t.Fatalf("table display width = %d, want %d: %q", lineWidth, tableWidth, line)
+		}
 	}
-	return strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
+	if !sawTableLine {
+		t.Fatalf("rendered output did not include table lines: %q", rendered)
+	}
 }
 
 func TestRenderTableWrapsLongDetailedRows(t *testing.T) {
@@ -52,10 +59,12 @@ func TestRenderTableWrapsLongDetailedRows(t *testing.T) {
 			t.Fatalf("rendered line too wide (%d chars): %q", len(line), line)
 		}
 	}
+	assertUniformTableWidth(t, rendered)
 
-	normalized := normalizedWriterText(rendered)
+	normalized := testutil.NormalizeTableText(rendered)
 	for _, want := range []string{
-		"(current session)",
+		"name (current",
+		"session)",
 		"visibility blocked",
 		"authorization API",
 		"review the exact",
@@ -64,6 +73,14 @@ func TestRenderTableWrapsLongDetailedRows(t *testing.T) {
 	} {
 		if !strings.Contains(normalized, want) {
 			t.Fatalf("rendered output missing %q in %q", want, normalized)
+		}
+	}
+	for _, want := range []string{
+		"attack angle",
+		"authorization API",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
 		}
 	}
 }
@@ -125,23 +142,7 @@ func TestRenderWorkloadsTableKeepsAlignedAttachedDetailBox(t *testing.T) {
 		t.Fatalf("Render returned error: %v", err)
 	}
 
-	lines := strings.Split(rendered, "\n")
-	tableWidth := 0
-	for _, line := range lines {
-		if !strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "|") {
-			continue
-		}
-		if tableWidth == 0 {
-			tableWidth = len(line)
-			continue
-		}
-		if len(line) != tableWidth {
-			t.Fatalf("workloads table line width = %d, want %d: %q", len(line), tableWidth, line)
-		}
-	}
-	if tableWidth == 0 {
-		t.Fatalf("rendered workloads output did not include table lines: %q", rendered)
-	}
+	assertUniformTableWidth(t, rendered)
 	for _, want := range []string{
 		"no exposed path seen",
 		"attack angle",
@@ -150,7 +151,7 @@ func TestRenderWorkloadsTableKeepsAlignedAttachedDetailBox(t *testing.T) {
 			t.Fatalf("rendered output missing %q in %q", want, rendered)
 		}
 	}
-	normalized := normalizedWriterText(rendered)
+	normalized := testutil.NormalizeTableText(rendered)
 	for _, want := range []string{
 		"this workload may be able to control other containers on the same machine.",
 	} {
@@ -182,21 +183,218 @@ func TestRenderWorkloadsTableKeepsAlignedWidthWithWrappedMultibyteContent(t *tes
 		t.Fatalf("Render returned error: %v", err)
 	}
 
-	tableWidth := 0
-	for _, line := range strings.Split(rendered, "\n") {
-		if !strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "|") {
-			continue
-		}
-		lineWidth := lipgloss.Width(line)
-		if tableWidth == 0 {
-			tableWidth = lineWidth
-			continue
-		}
-		if lineWidth != tableWidth {
-			t.Fatalf("workloads table display width = %d, want %d: %q", lineWidth, tableWidth, line)
+	assertUniformTableWidth(t, rendered)
+}
+
+func TestRenderServiceAccountsTableKeepsAlignedWidthWithLongTokenPosture(t *testing.T) {
+	payload := map[string]any{
+		"service_accounts": []any{
+			map[string]any{
+				"priority":          "high",
+				"namespace":         "default",
+				"name":              "fox-admin",
+				"workload_count":    2,
+				"related_workloads": []any{"default/fox-admin", "default/api"},
+				"power_summary":     "has cluster-wide admin-like access",
+				"token_posture":     "token auto-mount is visible on 2 attached workloads; legacy token secret is visible; runtime token review is still not proven from current scope",
+				"why_care":          "This identity path matters because the attached workloads are already central and the visible token posture still changes the next move.",
+			},
+		},
+	}
+
+	rendered, err := Render("table", "service-accounts", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
+	assertUniformTableWidth(t, rendered)
+	for _, want := range []string{
+		"harrierops-kube service-accounts",
+		"attack angle",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
 		}
 	}
-	if tableWidth == 0 {
-		t.Fatalf("rendered workloads output did not include table lines: %q", rendered)
+
+	normalized := testutil.NormalizeTableText(rendered)
+	for _, want := range []string{
+		"fox-admin",
+		"cluster-wide",
+		"admin-like",
+		"legacy token secret is visible",
+		"current scope",
+		"This identity path matters because the attached workloads are already central",
+	} {
+		if !strings.Contains(normalized, want) {
+			t.Fatalf("normalized rendered output missing %q in %q", want, normalized)
+		}
+	}
+}
+
+func TestRenderWhoAmITableKeepsAlignedWidthWithLongEvidence(t *testing.T) {
+	payload := map[string]any{
+		"kube_context": map[string]any{
+			"cluster_name":    "lab-cluster",
+			"server":          "https://10.0.0.1:6443",
+			"current_context": "lab-cluster",
+			"namespace":       "default",
+			"user":            "fox-operator",
+			"server_version":  "v1.30.1",
+		},
+		"current_identity": map[string]any{
+			"label":      "fox-operator",
+			"kind":       "User",
+			"confidence": "direct",
+		},
+		"session": map[string]any{
+			"foothold_family":    "cloud-bridged",
+			"auth_material_type": "exec-plugin",
+			"execution_origin":   "outside-cluster",
+			"visibility_scope":   "cluster-scoped",
+		},
+		"environment_hint": map[string]any{
+			"summary":    "The visible API endpoint looks private or lab-shaped rather than strongly managed-service-branded.",
+			"type":       "self-managed-like",
+			"confidence": "heuristic",
+			"evidence": []any{
+				"The visible API endpoint is an internal-style address without strong managed-cluster branding.",
+			},
+		},
+		"identity_evidence": []any{
+			"The active kubeconfig context names user 'fox-operator'.",
+			"The current auth path shows an exec-plugin style kubeconfig flow with enough context to trust the session shape.",
+		},
+	}
+
+	rendered, err := Render("table", "whoami", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
+	assertUniformTableWidth(t, rendered)
+	for _, want := range []string{
+		"harrierops-kube whoami",
+		"Identity Evidence",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
+		}
+	}
+
+	normalized := testutil.NormalizeTableText(rendered)
+	for _, want := range []string{
+		"Cluster",
+		"lab-cluster",
+		"Environment Hint",
+		"managed-",
+		"service-branded",
+		"Identity Evidence",
+		"exec-plugin style kubeconfig flow",
+	} {
+		if !strings.Contains(normalized, want) {
+			t.Fatalf("normalized rendered output missing %q in %q", want, normalized)
+		}
+	}
+}
+
+func TestRenderChainsFamilyTableShowsSelectedFamilyHeaderAndTakeaway(t *testing.T) {
+	payload := map[string]any{
+		"family":           "workload-identity-pivot",
+		"summary":          "2 workload-linked identity paths are ready for first review.",
+		"backing_commands": []any{"workloads", "service-accounts", "permissions", "secrets"},
+		"paths": []any{
+			map[string]any{
+				"priority":                  "high",
+				"source_asset":              "default/web",
+				"subversion_point":          "switch workload default/web to service account default/fox-admin",
+				"path_type":                 "direct control visible",
+				"likely_kubernetes_control": "service account default/fox-admin has cluster-wide admin-like access",
+				"visibility_tier":           "high",
+				"next_review":               "workloads",
+				"why_stop_here":             "current foothold can change an already running workload with stronger identity",
+				"confidence_boundary":       "Current scope confirms the workload service account field is changeable.",
+				"summary":                   "visible target and action edge align cleanly",
+			},
+			map[string]any{
+				"priority":                  "medium",
+				"source_asset":              "default/fox-admin",
+				"subversion_point":          "review visible workload-linked token path on default/fox-admin",
+				"path_type":                 "direct control not confirmed",
+				"likely_kubernetes_control": "attached service account has cluster-wide admin-like access",
+				"visibility_tier":           "medium",
+				"next_review":               "review visible token path",
+				"why_stop_here":             "runtime token inspection is not yet proven",
+				"confidence_boundary":       "Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
+				"summary":                   "visible target and identity path are present",
+			},
+		},
+	}
+
+	rendered, err := Render("table", "chains", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
+	assertUniformTableWidth(t, rendered)
+	normalized := testutil.NormalizeTableText(rendered)
+	for _, want := range []string{
+		"harrierops-kube chains workload-identity-pivot",
+		"Summary: 2 workload-linked identity paths are ready for first review.",
+		"Backing commands: workloads, service-accounts, permissions, secrets",
+		"subversion point",
+		"direct control",
+		"visible default/fox-admin",
+		"review visible",
+		"workload-linked",
+		"token path on",
+		"default/fox-admin",
+		"Takeaway: 2 visible workload-identity pivot row(s); 1 high, 1 medium, 0 low.",
+	} {
+		if !strings.Contains(normalized, want) {
+			t.Fatalf("rendered output missing %q in %q", want, normalized)
+		}
+	}
+	for _, want := range []string{
+		"harrierops-kube chains workload-identity-pivot",
+		"Takeaway: 2 visible workload-identity pivot row(s); 1 high, 1 medium, 0 low.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestRenderChainsFamilyTableKeepsFamilyContextInEmptyState(t *testing.T) {
+	payload := map[string]any{
+		"family":           "workload-identity-pivot",
+		"summary":          "No bounded workload-identity pivot rows were confirmed from current scope.",
+		"backing_commands": []any{"workloads", "service-accounts", "permissions", "secrets"},
+		"paths":            []any{},
+	}
+
+	rendered, err := Render("table", "chains", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
+	normalized := testutil.NormalizeTableText(rendered)
+	for _, want := range []string{
+		"harrierops-kube chains workload-identity-pivot",
+		"Summary: No bounded workload-identity pivot rows were confirmed from current scope.",
+		"Backing commands: workloads, service-accounts, permissions, secrets",
+		"No bounded workload-identity pivot rows were confirmed from current scope.",
+	} {
+		if !strings.Contains(normalized, want) {
+			t.Fatalf("rendered output missing %q in %q", want, normalized)
+		}
+	}
+	for _, want := range []string{
+		"harrierops-kube chains workload-identity-pivot",
+		"No bounded workload-identity pivot rows were confirmed from current scope.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
+		}
 	}
 }

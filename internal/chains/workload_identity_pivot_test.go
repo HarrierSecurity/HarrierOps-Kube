@@ -146,52 +146,40 @@ func TestBuildWorkloadIdentityPivotOutputBuildsExactEnvPatchRowWhenActionAndSurf
 	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
 		StartingFoothold: "fox-operator (current foothold)",
 		Workloads: []model.WorkloadPath{
-			{
-				ID:                   "pod:default:fox-admin",
-				Name:                 "fox-admin",
-				Namespace:            "default",
-				Kind:                 "Pod",
-				ServiceAccountName:   "fox-admin",
-				ServiceAccountPower:  "has cluster-wide admin-like access",
-				VisiblePatchSurfaces: []string{"image", "env", "service account"},
-				Priority:             "high",
-			},
+			testPodWorkloadPath(workloadPathSpec{
+				Name:                "fox-admin",
+				Namespace:           "default",
+				ServiceAccountName:  "fox-admin",
+				ServiceAccountPower: "has cluster-wide admin-like access",
+				PatchRelevantFields: []string{"image", "env", "service account"},
+				Priority:            "high",
+			}),
 		},
 		ServiceAccounts: []model.ServiceAccountPath{
-			{
-				ID:           "serviceaccount:default:fox-admin",
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:         "fox-admin",
 				Namespace:    "default",
 				PowerSummary: "has cluster-wide admin-like access",
 				Priority:     "high",
-			},
+			}),
 		},
 		Permissions: []model.PermissionPath{
-			{
-				ID:            "current-session:user:patch-pods",
-				Scope:         "namespace/default",
-				ActionVerb:    "patch",
-				TargetGroup:   "pods",
-				ActionSummary: "can patch pods",
-			},
+			testCurrentSessionWorkloadChangePermission("default", "patch", "pods", "can patch pods"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("BuildWorkloadIdentityPivotOutput() error = %v", err)
 	}
-	if len(output.Paths) != 1 {
-		t.Fatalf("len(Paths) = %d, want 1", len(output.Paths))
-	}
 
-	row := output.Paths[0]
+	row, ok := chainRowBySubversionPoint(output.Paths, "patch env on workload default/fox-admin")
+	if !ok {
+		t.Fatalf("missing env patch row in %#v", output.Paths)
+	}
 	if row.PathType != "direct control visible" {
 		t.Fatalf("PathType = %q, want direct control visible", row.PathType)
 	}
 	if row.VisibilityTier != "high" {
 		t.Fatalf("VisibilityTier = %q, want high", row.VisibilityTier)
-	}
-	if row.SubversionPoint != "patch env on workload default/fox-admin" {
-		t.Fatalf("SubversionPoint = %q", row.SubversionPoint)
 	}
 	if row.WhyStopHere != WorkloadPatchWhyStopHere() {
 		t.Fatalf("WhyStopHere = %q", row.WhyStopHere)
@@ -206,34 +194,25 @@ func TestBuildWorkloadIdentityPivotOutputDoesNotPromoteControllerPatchIntoExactE
 	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
 		StartingFoothold: "fox-operator (current foothold)",
 		Workloads: []model.WorkloadPath{
-			{
-				ID:                   "pod:default:fox-admin",
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "fox-admin",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "fox-admin",
 				ServiceAccountPower:  "has cluster-wide admin-like access",
 				VisiblePatchSurfaces: []string{"image", "env", "service account"},
 				Priority:             "high",
-			},
+			}),
 		},
 		ServiceAccounts: []model.ServiceAccountPath{
-			{
-				ID:           "serviceaccount:default:fox-admin",
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:         "fox-admin",
 				Namespace:    "default",
 				PowerSummary: "has cluster-wide admin-like access",
 				Priority:     "high",
-			},
+			}),
 		},
 		Permissions: []model.PermissionPath{
-			{
-				ID:            "current-session:user:patch-workload-controllers",
-				Scope:         "namespace/default",
-				ActionVerb:    "patch",
-				TargetGroup:   "workload-controllers",
-				ActionSummary: "can patch workload controllers",
-			},
+			testCurrentSessionWorkloadChangePermission("default", "patch", "workload-controllers", "can patch workload controllers"),
 		},
 	})
 	if err != nil {
@@ -244,74 +223,117 @@ func TestBuildWorkloadIdentityPivotOutputDoesNotPromoteControllerPatchIntoExactE
 	}
 }
 
-func TestBuildWorkloadIdentityPivotOutputBuildsExactServiceAccountSwitchRowWhenOneStrongerCandidateIsVisible(t *testing.T) {
+func TestBuildWorkloadIdentityPivotOutputBuildsExactRowsForSafeVisiblePatchSurfaces(t *testing.T) {
 	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
 		StartingFoothold: "fox-operator (current foothold)",
 		Workloads: []model.WorkloadPath{
-			{
-				ID:                   "pod:default:web",
-				Name:                 "web",
-				Namespace:            "default",
-				Kind:                 "Pod",
-				ServiceAccountName:   "web",
-				VisiblePatchSurfaces: []string{"image", "service account"},
-				Priority:             "high",
-				PublicExposure:       true,
-			},
-			{
-				ID:                   "pod:default:fox-admin",
-				Name:                 "fox-admin",
-				Namespace:            "default",
-				Kind:                 "Pod",
-				ServiceAccountName:   "fox-admin",
-				ServiceAccountPower:  "has cluster-wide admin-like access",
-				VisiblePatchSurfaces: []string{"image", "service account"},
-				Priority:             "high",
-			},
+			testPodWorkloadPath(workloadPathSpec{
+				Name:                "fox-admin",
+				Namespace:           "default",
+				ServiceAccountName:  "fox-admin",
+				ServiceAccountPower: "has cluster-wide admin-like access",
+				PatchRelevantFields: []string{"image", "command", "args", "env", "service account", "mounted secret refs", "mounted config refs", "init containers", "sidecars"},
+				Priority:            "high",
+			}),
 		},
 		ServiceAccounts: []model.ServiceAccountPath{
-			{
-				ID:             "serviceaccount:default:web",
-				Name:           "web",
-				Namespace:      "default",
-				EvidenceStatus: "direct",
-				Priority:       "medium",
-				PowerRank:      0,
-			},
-			{
-				ID:             "serviceaccount:default:fox-admin",
-				Name:           "fox-admin",
-				Namespace:      "default",
-				EvidenceStatus: "direct",
-				PowerSummary:   "has cluster-wide admin-like access",
-				Priority:       "high",
-				PowerRank:      100,
-			},
+			testServiceAccountPath(serviceAccountPathSpec{
+				Name:         "fox-admin",
+				Namespace:    "default",
+				PowerSummary: "has cluster-wide admin-like access",
+				Priority:     "high",
+			}),
 		},
 		Permissions: []model.PermissionPath{
-			{
-				ID:            "current-session:user:patch-pods",
-				Scope:         "namespace/default",
-				ActionVerb:    "patch",
-				TargetGroup:   "pods",
-				ActionSummary: "can patch pods",
-			},
+			testCurrentSessionWorkloadChangePermission("default", "patch", "pods", "can patch pods"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("BuildWorkloadIdentityPivotOutput() error = %v", err)
 	}
 
-	if len(output.Paths) != 1 {
-		t.Fatalf("len(Paths) = %d, want 1", len(output.Paths))
+	got := map[string]bool{}
+	for _, row := range output.Paths {
+		got[row.SubversionPoint] = true
 	}
 
-	row := output.Paths[0]
+	for _, want := range []string{
+		"patch image on workload default/fox-admin",
+		"patch command on workload default/fox-admin",
+		"patch args on workload default/fox-admin",
+		"patch env on workload default/fox-admin",
+		"patch mounted secret refs on workload default/fox-admin",
+		"patch mounted config refs on workload default/fox-admin",
+		"patch init containers on workload default/fox-admin",
+	} {
+		if !got[want] {
+			t.Fatalf("missing exact patch row %q in %#v", want, got)
+		}
+	}
+
+	for _, suppressed := range []string{
+		"patch service account on workload default/fox-admin",
+		"patch sidecars on workload default/fox-admin",
+		"patch replicas on workload default/fox-admin",
+	} {
+		if got[suppressed] {
+			t.Fatalf("unexpected suppressed patch row %q in %#v", suppressed, got)
+		}
+	}
+}
+
+func TestBuildWorkloadIdentityPivotOutputBuildsExactServiceAccountSwitchRowWhenOneStrongerCandidateIsVisible(t *testing.T) {
+	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
+		StartingFoothold: "fox-operator (current foothold)",
+		Workloads: []model.WorkloadPath{
+			testPodWorkloadPath(workloadPathSpec{
+				Name:                 "web",
+				Namespace:            "default",
+				ServiceAccountName:   "web",
+				VisiblePatchSurfaces: []string{"image", "service account"},
+				Priority:             "high",
+				PublicExposure:       true,
+			}),
+			testPodWorkloadPath(workloadPathSpec{
+				Name:                 "fox-admin",
+				Namespace:            "default",
+				ServiceAccountName:   "fox-admin",
+				ServiceAccountPower:  "has cluster-wide admin-like access",
+				VisiblePatchSurfaces: []string{"image", "service account"},
+				Priority:             "high",
+			}),
+		},
+		ServiceAccounts: []model.ServiceAccountPath{
+			testServiceAccountPath(serviceAccountPathSpec{
+				Name:           "web",
+				Namespace:      "default",
+				EvidenceStatus: "direct",
+				Priority:       "medium",
+				PowerRank:      0,
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
+				Name:           "fox-admin",
+				Namespace:      "default",
+				EvidenceStatus: "direct",
+				PowerSummary:   "has cluster-wide admin-like access",
+				Priority:       "high",
+				PowerRank:      100,
+			}),
+		},
+		Permissions: []model.PermissionPath{
+			testCurrentSessionWorkloadChangePermission("default", "patch", "pods", "can patch pods"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildWorkloadIdentityPivotOutput() error = %v", err)
+	}
+
+	row, ok := chainRowBySubversionPoint(output.Paths, "switch workload default/web to service account default/fox-admin")
+	if !ok {
+		t.Fatalf("missing exact service-account switch row in %#v", output.Paths)
+	}
 	if row.PathType != "direct control visible" {
 		t.Fatalf("PathType = %q, want direct control visible", row.PathType)
-	}
-	if row.SubversionPoint != "switch workload default/web to service account default/fox-admin" {
-		t.Fatalf("SubversionPoint = %q", row.SubversionPoint)
 	}
 	if row.LikelyKubernetesControl != "service account default/fox-admin has cluster-wide admin-like access" {
 		t.Fatalf("LikelyKubernetesControl = %q", row.LikelyKubernetesControl)
@@ -326,89 +348,70 @@ func TestBuildWorkloadIdentityPivotOutputBuildsExactServiceAccountSwitchRowWhenO
 	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
 		StartingFoothold: "fox-operator (current foothold)",
 		Workloads: []model.WorkloadPath{
-			{
-				ID:                   "pod:default:web",
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "web",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "web",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
 				PublicExposure:       true,
-			},
-			{
-				ID:                   "pod:default:fox-admin",
+			}),
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "fox-admin",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "fox-admin",
 				ServiceAccountPower:  "has cluster-wide admin-like access",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
-			},
-			{
-				ID:                   "pod:default:builder",
+			}),
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "builder",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "builder",
 				ServiceAccountPower:  "can change workloads",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "medium",
-			},
+			}),
 		},
 		ServiceAccounts: []model.ServiceAccountPath{
-			{
-				ID:             "serviceaccount:default:web",
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "web",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				Priority:       "medium",
 				PowerRank:      0,
-			},
-			{
-				ID:             "serviceaccount:default:fox-admin",
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "fox-admin",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				PowerSummary:   "has cluster-wide admin-like access",
 				Priority:       "high",
 				PowerRank:      100,
-			},
-			{
-				ID:             "serviceaccount:default:builder",
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "builder",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				PowerSummary:   "can change workloads",
 				Priority:       "high",
 				PowerRank:      80,
-			},
+			}),
 		},
 		Permissions: []model.PermissionPath{
-			{
-				ID:            "current-session:user:patch-pods",
-				Scope:         "namespace/default",
-				ActionVerb:    "patch",
-				TargetGroup:   "pods",
-				ActionSummary: "can patch pods",
-			},
+			testCurrentSessionWorkloadChangePermission("default", "patch", "pods", "can patch pods"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("BuildWorkloadIdentityPivotOutput() error = %v", err)
 	}
 
-	if len(output.Paths) != 1 {
-		t.Fatalf("len(Paths) = %d, want 1", len(output.Paths))
+	row, ok := chainRowBySubversionPoint(output.Paths, "switch workload default/web to service account default/fox-admin")
+	if !ok {
+		t.Fatalf("missing exact service-account switch row in %#v", output.Paths)
 	}
-
-	row := output.Paths[0]
 	if row.PathType != "direct control visible" {
 		t.Fatalf("PathType = %q, want direct control visible", row.PathType)
-	}
-	if row.SubversionPoint != "switch workload default/web to service account default/fox-admin" {
-		t.Fatalf("SubversionPoint = %q", row.SubversionPoint)
 	}
 	if row.LikelyKubernetesControl != "service account default/fox-admin has cluster-wide admin-like access" {
 		t.Fatalf("LikelyKubernetesControl = %q", row.LikelyKubernetesControl)
@@ -423,89 +426,70 @@ func TestBuildWorkloadIdentityPivotOutputFallsBackToBoundedServiceAccountRepoint
 	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
 		StartingFoothold: "fox-operator (current foothold)",
 		Workloads: []model.WorkloadPath{
-			{
-				ID:                   "pod:default:web",
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "web",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "web",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
 				PublicExposure:       true,
-			},
-			{
-				ID:                   "pod:default:fox-admin",
+			}),
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "fox-admin",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "fox-admin",
 				ServiceAccountPower:  "can change workloads",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
-			},
-			{
-				ID:                   "pod:default:builder",
+			}),
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "builder",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "builder",
 				ServiceAccountPower:  "can create pods",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "medium",
-			},
+			}),
 		},
 		ServiceAccounts: []model.ServiceAccountPath{
-			{
-				ID:             "serviceaccount:default:web",
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "web",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				Priority:       "medium",
 				PowerRank:      0,
-			},
-			{
-				ID:             "serviceaccount:default:fox-admin",
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "fox-admin",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				PowerSummary:   "can change workloads",
 				Priority:       "high",
 				PowerRank:      80,
-			},
-			{
-				ID:             "serviceaccount:default:builder",
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "builder",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				PowerSummary:   "can create pods",
 				Priority:       "high",
 				PowerRank:      80,
-			},
+			}),
 		},
 		Permissions: []model.PermissionPath{
-			{
-				ID:            "current-session:user:patch-pods",
-				Scope:         "namespace/default",
-				ActionVerb:    "patch",
-				TargetGroup:   "pods",
-				ActionSummary: "can patch pods",
-			},
+			testCurrentSessionWorkloadChangePermission("default", "patch", "pods", "can patch pods"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("BuildWorkloadIdentityPivotOutput() error = %v", err)
 	}
 
-	if len(output.Paths) != 1 {
-		t.Fatalf("len(Paths) = %d, want 1", len(output.Paths))
+	row, ok := chainRowBySubversionPoint(output.Paths, "review stronger service-account repointing on workload default/web")
+	if !ok {
+		t.Fatalf("missing bounded service-account repointing row in %#v", output.Paths)
 	}
-
-	row := output.Paths[0]
 	if row.PathType != "workload pivot" {
 		t.Fatalf("PathType = %q, want workload pivot", row.PathType)
-	}
-	if row.SubversionPoint != "review stronger service-account repointing on workload default/web" {
-		t.Fatalf("SubversionPoint = %q", row.SubversionPoint)
 	}
 	if row.LikelyKubernetesControl != "visible replacement identities include can create pods, can change workloads" {
 		t.Fatalf("LikelyKubernetesControl = %q", row.LikelyKubernetesControl)
@@ -519,73 +503,58 @@ func TestBuildWorkloadIdentityPivotOutputSupportsControllerBasedServiceAccountRe
 	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
 		StartingFoothold: "fox-operator (current foothold)",
 		Workloads: []model.WorkloadPath{
-			{
-				ID:                   "deployment:apps:storefront:web",
+			testDeploymentWorkloadPath(workloadPathSpec{
 				Name:                 "web",
 				Namespace:            "apps",
-				Kind:                 "Deployment",
 				ServiceAccountName:   "web",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
 				PublicExposure:       true,
-			},
-			{
-				ID:                   "deployment:apps:fox-admin",
+			}),
+			testDeploymentWorkloadPath(workloadPathSpec{
 				Name:                 "fox-admin",
 				Namespace:            "apps",
-				Kind:                 "Deployment",
 				ServiceAccountName:   "fox-admin",
 				ServiceAccountPower:  "has cluster-wide admin-like access",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
-			},
-			{
-				ID:                   "pod:apps:debug",
+			}),
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "debug",
 				Namespace:            "apps",
-				Kind:                 "Pod",
 				ServiceAccountName:   "debug",
 				ServiceAccountPower:  "has cluster-wide admin-like access",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "low",
-			},
+			}),
 		},
 		ServiceAccounts: []model.ServiceAccountPath{
-			{
-				ID:             "serviceaccount:apps:web",
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "web",
 				Namespace:      "apps",
 				EvidenceStatus: "direct",
 				Priority:       "medium",
 				PowerRank:      0,
-			},
-			{
-				ID:             "serviceaccount:apps:fox-admin",
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "fox-admin",
 				Namespace:      "apps",
 				EvidenceStatus: "direct",
 				PowerSummary:   "has cluster-wide admin-like access",
 				Priority:       "high",
 				PowerRank:      100,
-			},
-			{
-				ID:             "serviceaccount:apps:debug",
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "debug",
 				Namespace:      "apps",
 				EvidenceStatus: "direct",
 				PowerSummary:   "has cluster-wide admin-like access",
 				Priority:       "low",
 				PowerRank:      100,
-			},
+			}),
 		},
 		Permissions: []model.PermissionPath{
-			{
-				ID:            "current-session:user:patch-workload-controllers",
-				Scope:         "namespace/apps",
-				ActionVerb:    "patch",
-				TargetGroup:   "workload-controllers",
-				ActionSummary: "can patch workload controllers",
-			},
+			testCurrentSessionWorkloadChangePermission("apps", "patch", "workload-controllers", "can patch workload controllers"),
 		},
 	})
 	if err != nil {
@@ -609,61 +578,143 @@ func TestBuildWorkloadIdentityPivotOutputUsesPowerRankInsteadOfSummaryTextForExa
 	output, err := BuildWorkloadIdentityPivotOutput(contracts.Metadata{Command: "chains"}, WorkloadIdentityPivotInputs{
 		StartingFoothold: "fox-operator (current foothold)",
 		Workloads: []model.WorkloadPath{
-			{
-				ID:                   "pod:default:web",
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "web",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "web",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
-			},
-			{
-				ID:                   "pod:default:custom-strong",
+			}),
+			testPodWorkloadPath(workloadPathSpec{
 				Name:                 "custom-strong",
 				Namespace:            "default",
-				Kind:                 "Pod",
 				ServiceAccountName:   "custom-strong",
 				ServiceAccountPower:  "custom stronger wording",
 				VisiblePatchSurfaces: []string{"image", "service account"},
 				Priority:             "high",
-			},
+			}),
 		},
 		ServiceAccounts: []model.ServiceAccountPath{
-			{
-				ID:             "serviceaccount:default:web",
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "web",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				PowerRank:      0,
-			},
-			{
-				ID:             "serviceaccount:default:custom-strong",
+			}),
+			testServiceAccountPath(serviceAccountPathSpec{
 				Name:           "custom-strong",
 				Namespace:      "default",
 				EvidenceStatus: "direct",
 				PowerSummary:   "custom stronger wording",
 				PowerRank:      95,
-			},
+			}),
 		},
 		Permissions: []model.PermissionPath{
-			{
-				ID:            "current-session:user:patch-pods",
-				Scope:         "namespace/default",
-				ActionVerb:    "patch",
-				TargetGroup:   "pods",
-				ActionSummary: "can patch pods",
-			},
+			testCurrentSessionWorkloadChangePermission("default", "patch", "pods", "can patch pods"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("BuildWorkloadIdentityPivotOutput() error = %v", err)
 	}
 
-	if len(output.Paths) != 1 {
-		t.Fatalf("len(Paths) = %d, want 1", len(output.Paths))
+	row, ok := chainRowBySubversionPoint(output.Paths, "switch workload default/web to service account default/custom-strong")
+	if !ok {
+		t.Fatalf("missing exact service-account switch row in %#v", output.Paths)
 	}
-	if output.Paths[0].SubversionPoint != "switch workload default/web to service account default/custom-strong" {
-		t.Fatalf("SubversionPoint = %q", output.Paths[0].SubversionPoint)
+	if row.SubversionPoint != "switch workload default/web to service account default/custom-strong" {
+		t.Fatalf("SubversionPoint = %q", row.SubversionPoint)
 	}
+}
+
+type workloadPathSpec struct {
+	Name                 string
+	Namespace            string
+	ServiceAccountName   string
+	ServiceAccountPower  string
+	PatchRelevantFields  []string
+	VisiblePatchSurfaces []string
+	Priority             string
+	PublicExposure       bool
+}
+
+func testPodWorkloadPath(spec workloadPathSpec) model.WorkloadPath {
+	patchRelevantFields := spec.PatchRelevantFields
+	if len(patchRelevantFields) == 0 {
+		patchRelevantFields = spec.VisiblePatchSurfaces
+	}
+	return model.WorkloadPath{
+		ID:                   "pod:" + spec.Namespace + ":" + spec.Name,
+		Kind:                 "Pod",
+		Name:                 spec.Name,
+		Namespace:            spec.Namespace,
+		ServiceAccountName:   spec.ServiceAccountName,
+		ServiceAccountPower:  spec.ServiceAccountPower,
+		PatchRelevantFields:  patchRelevantFields,
+		VisiblePatchSurfaces: spec.VisiblePatchSurfaces,
+		Priority:             spec.Priority,
+		PublicExposure:       spec.PublicExposure,
+	}
+}
+
+func testDeploymentWorkloadPath(spec workloadPathSpec) model.WorkloadPath {
+	patchRelevantFields := spec.PatchRelevantFields
+	if len(patchRelevantFields) == 0 {
+		patchRelevantFields = spec.VisiblePatchSurfaces
+	}
+	return model.WorkloadPath{
+		ID:                   "deployment:" + spec.Namespace + ":" + spec.Name,
+		Kind:                 "Deployment",
+		Name:                 spec.Name,
+		Namespace:            spec.Namespace,
+		ServiceAccountName:   spec.ServiceAccountName,
+		ServiceAccountPower:  spec.ServiceAccountPower,
+		PatchRelevantFields:  patchRelevantFields,
+		VisiblePatchSurfaces: spec.VisiblePatchSurfaces,
+		Priority:             spec.Priority,
+		PublicExposure:       spec.PublicExposure,
+	}
+}
+
+type serviceAccountPathSpec struct {
+	Name             string
+	Namespace        string
+	EvidenceStatus   string
+	Priority         string
+	PowerSummary     string
+	PowerRank        int
+	RelatedWorkloads []string
+	TokenPosture     string
+}
+
+func testServiceAccountPath(spec serviceAccountPathSpec) model.ServiceAccountPath {
+	return model.ServiceAccountPath{
+		ID:               "serviceaccount:" + spec.Namespace + ":" + spec.Name,
+		Name:             spec.Name,
+		Namespace:        spec.Namespace,
+		EvidenceStatus:   spec.EvidenceStatus,
+		Priority:         spec.Priority,
+		PowerSummary:     spec.PowerSummary,
+		PowerRank:        spec.PowerRank,
+		RelatedWorkloads: spec.RelatedWorkloads,
+		TokenPosture:     spec.TokenPosture,
+	}
+}
+
+func testCurrentSessionWorkloadChangePermission(namespace, verb, targetGroup, summary string) model.PermissionPath {
+	return model.PermissionPath{
+		ID:            "current-session:user:" + verb + "-" + targetGroup,
+		Scope:         "namespace/" + namespace,
+		ActionVerb:    verb,
+		TargetGroup:   targetGroup,
+		ActionSummary: summary,
+	}
+}
+
+func chainRowBySubversionPoint(rows []model.ChainPathRecord, subversionPoint string) (model.ChainPathRecord, bool) {
+	for _, row := range rows {
+		if row.SubversionPoint == subversionPoint {
+			return row, true
+		}
+	}
+	return model.ChainPathRecord{}, false
 }
