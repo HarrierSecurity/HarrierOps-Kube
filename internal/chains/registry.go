@@ -11,8 +11,6 @@ const GroupedCommandName = "chains"
 var groupedCommandInputModes = []string{"live", "artifacts"}
 var preferredArtifactOrder = []string{"loot", "json"}
 
-const currentBehavior = "Family overview and grouped runner. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to run one family from current scope."
-
 type SourceSpec struct {
 	Command       string
 	MinimumFields []string
@@ -37,9 +35,9 @@ var familySpecs = []FamilySpec{
 	{
 		Name:         "workload-identity-pivot",
 		State:        "implemented",
-		Meaning:      "A current foothold can likely influence a workload or workload-linked service account that already carries stronger downstream control.",
-		Summary:      "Follow the shortest visible workload-to-identity pivot toward stronger service-account-backed Kubernetes control.",
-		AllowedClaim: "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, stronger control, or sidecar insertion without the explicit control edge and confirmation basis.",
+		Meaning:      "A current foothold may be able to touch a running app or the identity it uses, then turn that into broader cluster control.",
+		Summary:      "Find the shortest visible path from a running app to a stronger identity you may be able to use next.",
+		AllowedClaim: "Visible app, identity, permission, escalation, and secret clues that line up into a believable path from where you stand now to a stronger workload-linked identity.",
 		CurrentGap:   WorkloadIdentityPivotCurrentGap(),
 		BestCurrentExamples: []string{
 			"workloads -> service-accounts -> permissions",
@@ -60,13 +58,13 @@ var familySpecs = []FamilySpec{
 		PathTypeGuide: []model.ChainPathTypeGuide{
 			{
 				Name:              "direct control visible",
-				Meaning:           "Current access likely lets the operator change or enter the workload, and the attached service account already changes the next move.",
+				Meaning:           "Current access likely lets the operator change or enter the workload, and the attached service account already changes the path immediately.",
 				DefaultNextReview: "permissions",
 				PriorityIntent:    "highest-value default row type",
 			},
 			{
 				Name:              "workload pivot",
-				Meaning:           "The workload-linked service account path is visible and meaningful, but the stronger control story still depends on deeper workload-side validation.",
+				Meaning:           "The workload-linked service account path is visible and meaningful, but the exact workload-side move still is not specific enough to name cleanly.",
 				DefaultNextReview: "workloads",
 				PriorityIntent:    "below direct control visible, above visibility-limited rows",
 			},
@@ -78,7 +76,7 @@ var familySpecs = []FamilySpec{
 			},
 			{
 				Name:              "visibility blocked",
-				Meaning:           "A real workload-linked identity clue survives, but current scope does not confirm enough of the stronger path to raise it honestly.",
+				Meaning:           "A real workload-linked identity clue survives, but current scope still blocks the missing edge needed to keep the stronger path honest.",
 				DefaultNextReview: "permissions",
 				PriorityIntent:    "lowest default row type unless the blocked clue still carries unusually strong operator value",
 			},
@@ -190,7 +188,7 @@ func PreferredArtifactOrder() []string {
 }
 
 func CurrentBehavior() string {
-	return currentBehavior
+	return GroupedOverviewCurrentBehavior()
 }
 
 func FamilyNames() []string {

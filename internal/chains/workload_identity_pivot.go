@@ -150,6 +150,7 @@ func buildExecIntoPodsRows(
 			ConfidenceBoundary:      "Current scope confirms the current foothold can exec into pods in namespace " + workload.Namespace + ".",
 			NextReview:              "workloads",
 			Summary:                 visibility.OperatorWording,
+			MissingConfirmation:     ExecIntoPodsMissingConfirmation(workload.Namespace),
 			EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
 			RelatedIDs:              []string{workload.ID, serviceAccount.ID, permission.ID},
 		})
@@ -217,6 +218,7 @@ func buildReadSecretsRows(
 			ConfidenceBoundary:      "Current scope confirms the current foothold can read secrets in namespace " + secretPath.Namespace + ".",
 			NextReview:              secretPath.NextReview,
 			Summary:                 visibility.OperatorWording,
+			MissingConfirmation:     ReadSecretsMissingConfirmation(secretPath.Namespace),
 			EvidenceCommands:        []string{"permissions", "secrets", "workloads", "service-accounts"},
 			RelatedIDs:              []string{permission.ID, secretPath.ID, workload.ID, serviceAccount.ID},
 		})
@@ -284,7 +286,7 @@ func buildTokenPathVisibleRows(
 			ConfidenceBoundary:      "Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
 			NextReview:              "workloads",
 			Summary:                 visibility.OperatorWording,
-			MissingConfirmation:     "Current foothold control of that workload or runtime token inspection is not yet proven.",
+			MissingConfirmation:     TokenPathVisibleMissingConfirmation(),
 			EvidenceCommands:        []string{"service-accounts", "secrets", "workloads", "privesc"},
 			RelatedIDs:              relatedIDs,
 		})
@@ -364,6 +366,7 @@ func buildPatchSpecificSurfaceRows(
 				ConfidenceBoundary:      confidenceBoundary,
 				NextReview:              "workloads",
 				Summary:                 visibility.OperatorWording,
+				MissingConfirmation:     PatchSurfaceMissingConfirmation(surface),
 				EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
 				RelatedIDs:              []string{permission.ID, workload.ID, serviceAccount.ID},
 			})
@@ -451,6 +454,7 @@ func buildSwitchServiceAccountRows(
 					ConfidenceBoundary:      confidenceBoundary,
 					NextReview:              "service-accounts",
 					Summary:                 visibility.OperatorWording,
+					MissingConfirmation:     ExactServiceAccountSwitchMissingConfirmation(namespace, namespacedServiceAccountLabel(target.Namespace, target.Name)),
 					EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
 					RelatedIDs:              relatedIDs,
 				}))
@@ -498,7 +502,7 @@ func buildSwitchServiceAccountRows(
 			ConfidenceBoundary:      confidenceBoundary,
 			NextReview:              "service-accounts",
 			Summary:                 visibility.OperatorWording,
-			MissingConfirmation:     "Current scope does not justify naming one exact replacement service account yet.",
+			MissingConfirmation:     BoundedServiceAccountSwitchMissingConfirmation(),
 			EvidenceCommands:        []string{"permissions", "workloads", "service-accounts"},
 			RelatedIDs:              relatedIDs,
 		}))

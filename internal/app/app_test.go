@@ -286,7 +286,7 @@ func TestNoArgsShowDedicatedRootHelpSurface(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	rendered := normalizedRenderText(stdout.String())
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"HarrierOps Kube Help",
 		"harrierops-kube help <command>",
@@ -304,6 +304,9 @@ func TestNoArgsShowDedicatedRootHelpSurface(t *testing.T) {
 			t.Fatalf("help output missing %q in %q", want, rendered)
 		}
 	}
+	if !strings.Contains(stdout.String(), "| HarrierOps Kube Help") {
+		t.Fatalf("root help output did not render with boxed help panel shape: %q", stdout.String())
+	}
 }
 
 func TestCommandHelpShowsTopicAfterCommand(t *testing.T) {
@@ -318,7 +321,7 @@ func TestCommandHelpShowsTopicAfterCommand(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	rendered := normalizedRenderText(stdout.String())
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"HarrierOps Kube Help :: permissions",
 		"Status: implemented command.",
@@ -336,6 +339,9 @@ func TestCommandHelpShowsTopicAfterCommand(t *testing.T) {
 			t.Fatalf("help topic output missing %q in %q", want, rendered)
 		}
 	}
+	if !strings.Contains(stdout.String(), "| HarrierOps Kube Help :: permissions") {
+		t.Fatalf("command help output did not render with boxed help panel shape: %q", stdout.String())
+	}
 }
 
 func TestChainsHelpShowsRunnableFamilyTopic(t *testing.T) {
@@ -350,24 +356,45 @@ func TestChainsHelpShowsRunnableFamilyTopic(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	rendered := normalizedRenderText(stdout.String())
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"HarrierOps Kube Help :: chains",
 		"Status: implemented command.",
 		"Section: orchestration",
-		"Offensive question: What bounded chained story is already visible from current scope?",
-		"Grouped family overview plus the first runnable defended path family from current scope.",
+		"Offensive question: Which grouped attack path is already visible from where I stand?",
+		"Grouped family overview plus the first runnable path family from current scope.",
 		"workload-identity-pivot",
 		"path type",
-		"internal proof ladder",
-		"kubernetes control",
-		"Live row wording stays evidence-bounded",
-		"Exact patch-surface rows now stay limited to safe visible workload fields the family can tie to the same workload honestly; sidecar-specific wording remains suppressed.",
+		"current family coverage limits",
+		"stronger control clue",
+		"Default row wording stays evidence-bounded",
+		"Exact patch rows stay limited to safe visible workload fields the family can tie to the same workload honestly; sidecar wording stays suppressed.",
 		"Service-account repointing rows name one exact replacement only when current scope makes that target specific; otherwise the family keeps the lead broader.",
 		"harrierops-kube chains workload-identity-pivot --output table",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("chains help output missing %q in %q", want, rendered)
+		}
+	}
+}
+
+func TestHelpPanelsRespectNarrowColumnsEnv(t *testing.T) {
+	t.Setenv("COLUMNS", "80")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := Run([]string{"help"}, stdout, stderr, nil)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	for _, line := range strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n") {
+		if len(line) > 80 {
+			t.Fatalf("help line exceeds narrow terminal width: %d chars in %q", len(line), line)
 		}
 	}
 }
@@ -602,7 +629,8 @@ func TestChainsTableOutputStaysOperatorReadable(t *testing.T) {
 		"confirmed",
 		"attached service",
 		"account has",
-		"admin-like access",
+		"admin-like",
+		"access",
 		"medium",
 		"Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
 	} {

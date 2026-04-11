@@ -2,7 +2,11 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"harrierops-kube/internal/chains"
 )
@@ -53,19 +57,12 @@ var commandHelpTopics = map[string]commandHelpTopic{
 		Name:              "chains",
 		Section:           "orchestration",
 		Status:            "implemented",
-		Summary:           "Grouped family overview plus the first runnable defended path family from current scope.",
-		OffensiveQuestion: "What bounded chained story is already visible from current scope?",
-		OperatorValue:     "Review which family answers the next operator question, then run that family against the current foothold instead of stitching five separate tables by hand.",
+		Summary:           chains.GroupedOverviewSummary(),
+		OffensiveQuestion: chains.GroupedOverviewOffensiveQuestion(),
+		OperatorValue:     chains.GroupedOverviewOperatorValue(),
 		SecurityValue:     "This is where workload, service-account, permission, secret, and escalation evidence becomes one bounded path story instead of five separate triage views.",
-		WhyCare:           "The operator should be able to move from visible foothold evidence to a defended next review without translating internal proof-state jargon.",
-		OutputHighlights: []string{
-			"grouped command name, command state, and current behavior",
-			"family state, meaning, summary, and allowed claim",
-			"family rows such as workload, subversion point, path type, and kubernetes control",
-			"visibility, next review, and evidence-bounded note text",
-			"path type guide separated from the internal proof ladder",
-			"backing source commands and current family gap",
-		},
+		WhyCare:           chains.GroupedOverviewWhyCare(),
+		OutputHighlights:  chains.GroupedOverviewOutputHighlights(),
 		Notes:   chains.WorkloadIdentityPivotHelpNotes(),
 		Example: "harrierops-kube chains workload-identity-pivot --output table",
 	},
@@ -228,73 +225,78 @@ var commandHelpTopics = map[string]commandHelpTopic{
 	},
 }
 
+const (
+	helpPanelMaxWidth = 132
+	helpPanelMinWidth = 56
+)
+
 func rootHelpText() string {
-	var builder strings.Builder
-	builder.WriteString("HarrierOps Kube Help\n\n")
-	builder.WriteString("Attack-path-focused Kubernetes recon with flat commands and scoped help.\n\n")
-	builder.WriteString("Usage:\n")
-	builder.WriteString("  harrierops-kube\n")
-	builder.WriteString("  harrierops-kube help\n")
-	builder.WriteString("  harrierops-kube help <command>\n")
-	builder.WriteString("  harrierops-kube <command> help\n")
-	builder.WriteString("  harrierops-kube <command> [global options]\n\n")
-	builder.WriteString("Sections:\n")
-	for _, section := range implementedSectionNames() {
-		builder.WriteString(fmt.Sprintf("  %s: %s\n", section, sectionHelpSummaries[section]))
+	usageLines := []string{
+		"harrierops-kube",
+		"harrierops-kube help",
+		"harrierops-kube help <command>",
+		"harrierops-kube <command> help",
+		"harrierops-kube <command> [global options]",
 	}
-	builder.WriteString("\nCommands:\n")
+
+	sectionLines := make([]string, 0, len(implementedSectionNames()))
+	for _, section := range implementedSectionNames() {
+		sectionLines = append(sectionLines, fmt.Sprintf("%s: %s", section, sectionHelpSummaries[section]))
+	}
+
+	commandLines := []string{}
 	for _, spec := range commandSpecs {
 		if spec.Status != "implemented" {
 			continue
 		}
 		topic := commandHelpTopics[spec.Name]
-		builder.WriteString(fmt.Sprintf("  %s: %s\n", spec.Name, topic.Summary))
+		commandLines = append(commandLines, fmt.Sprintf("%s: %s", spec.Name, topic.Summary))
 	}
-	builder.WriteString("\nLater depth surfaces:\n")
+
+	laterDepthLines := []string{}
 	for _, spec := range commandSpecs {
 		if spec.Status != "later-depth" {
 			continue
 		}
 		topic := commandHelpTopics[spec.Name]
-		builder.WriteString(fmt.Sprintf("  %s: %s\n", spec.Name, topic.Summary))
+		laterDepthLines = append(laterDepthLines, fmt.Sprintf("%s: %s", spec.Name, topic.Summary))
 	}
-	builder.WriteString("\nNotes:\n")
-	builder.WriteString("  - Shared flags such as --context, --namespace, --output, --outdir, and --debug work after the command.\n")
-	builder.WriteString("  - `chains` now has a family overview plus a runnable `workload-identity-pivot` family.\n")
-	builder.WriteString("  - `rbac` marks known built-in roles with `*`; that marker is name-based and heuristic.\n")
-	builder.WriteString("  - Partial or blocked reads should stay visible with issues instead of disappearing quietly.\n")
-	builder.WriteString("  - Honest bounded weaker claims should stay in default output when they still change the next operator decision.\n")
-	builder.WriteString("  - Use `harrierops-kube help <command>` or `harrierops-kube <command> help` for command detail.\n")
-	return builder.String()
+
+	notesLines := []string{
+		"Shared flags such as --context, --namespace, --output, --outdir, and --debug work after the command.",
+		"`chains` now has a family overview plus a runnable `workload-identity-pivot` family.",
+		"`rbac` marks known built-in roles with `*`; that marker is name-based and heuristic.",
+		"Partial or blocked reads should stay visible with issues instead of disappearing quietly.",
+		"Honest bounded weaker claims should stay in default output when they still change the next operator decision.",
+		"Use `harrierops-kube help <command>` or `harrierops-kube <command> help` for command detail.",
+	}
+
+	sections := []string{
+		renderHelpPanel(
+			"HarrierOps Kube Help",
+			[]string{"Attack-path-focused Kubernetes recon with flat commands and scoped help."},
+		),
+		renderHelpPanel("Usage:", usageLines),
+		renderHelpPanel("Sections:", sectionLines),
+		renderHelpPanel("Commands:", commandLines),
+		renderHelpPanel("Later depth surfaces:", laterDepthLines),
+		renderHelpPanel("Notes:", bulletLines(notesLines)),
+	}
+	return strings.Join(sections, "\n\n")
 }
 
 func commandHelpText(topic commandHelpTopic) string {
-	var builder strings.Builder
-	builder.WriteString("HarrierOps Kube Help :: ")
-	builder.WriteString(topic.Name)
-	builder.WriteString("\n\n")
-	builder.WriteString(topic.Summary)
-	builder.WriteString("\n\n")
+	frameLines := []string{}
 	if topic.Status == "implemented" {
-		builder.WriteString("Status: implemented command.\n")
+		frameLines = append(frameLines, "Status: implemented command.")
 	} else {
-		builder.WriteString("Status: later-depth surface.\n")
+		frameLines = append(frameLines, "Status: later-depth surface.")
 	}
-	builder.WriteString("Section: ")
-	builder.WriteString(topic.Section)
-	builder.WriteString("\n")
-	builder.WriteString("Offensive question: ")
-	builder.WriteString(topic.OffensiveQuestion)
-	builder.WriteString("\n")
-	builder.WriteString("Kube frame: ")
-	builder.WriteString(topic.OperatorValue)
-	builder.WriteString("\n\n")
-	builder.WriteString("Output highlights:\n")
-	for _, highlight := range topic.OutputHighlights {
-		builder.WriteString("  ")
-		builder.WriteString(highlight)
-		builder.WriteString("\n")
-	}
+	frameLines = append(frameLines,
+		"Section: "+topic.Section,
+		"Offensive question: "+topic.OffensiveQuestion,
+		"Kube frame: "+topic.OperatorValue,
+	)
 	notes := make([]string, 0, len(topic.Notes)+3)
 	if topic.SecurityValue != "" {
 		notes = append(notes, "Security value: "+topic.SecurityValue)
@@ -304,22 +306,70 @@ func commandHelpText(topic commandHelpTopic) string {
 	}
 	notes = append(notes, topic.Notes...)
 	notes = append(notes, "Current-scope visibility limits are investigative context, not proof the cluster is quiet.")
-	if len(notes) > 0 {
-		builder.WriteString("\nNotes:\n")
-		for _, note := range notes {
-			builder.WriteString("  ")
-			builder.WriteString(note)
-			builder.WriteString("\n")
-		}
+
+	sections := []string{
+		renderHelpPanel("HarrierOps Kube Help :: "+topic.Name, []string{topic.Summary}),
+		renderHelpPanel("Command frame:", frameLines),
+		renderHelpPanel("Output highlights:", bulletLines(topic.OutputHighlights)),
 	}
-	builder.WriteString("\nExample:\n")
-	builder.WriteString("  ")
-	builder.WriteString(topic.Example)
-	builder.WriteString("\n")
-	return builder.String()
+	if len(notes) > 0 {
+		sections = append(sections, renderHelpPanel("Notes:", bulletLines(notes)))
+	}
+	sections = append(sections, renderHelpPanel("Example:", []string{topic.Example}))
+	return strings.Join(sections, "\n\n")
 }
 
 func helpTopic(name string) (commandHelpTopic, bool) {
 	topic, ok := commandHelpTopics[name]
 	return topic, ok
+}
+
+func renderHelpPanel(title string, lines []string) string {
+	content := []string{title}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		content = append(content, trimmed)
+	}
+	return helpPanelStyle(currentHelpPanelWidth()).Render(strings.Join(content, "\n"))
+}
+
+func bulletLines(lines []string) []string {
+	bullets := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		bullets = append(bullets, "- "+trimmed)
+	}
+	return bullets
+}
+
+func helpPanelStyle(width int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.ASCIIBorder()).
+		Padding(0, 1).
+		Width(width)
+}
+
+func currentHelpPanelWidth() int {
+	columns, err := strconv.Atoi(strings.TrimSpace(os.Getenv("COLUMNS")))
+	if err != nil || columns <= 0 {
+		return helpPanelMaxWidth
+	}
+
+	width := columns - 2
+	if width <= 0 {
+		return helpPanelMinWidth
+	}
+	if width < helpPanelMinWidth {
+		return width
+	}
+	if width > helpPanelMaxWidth {
+		return helpPanelMaxWidth
+	}
+	return width
 }

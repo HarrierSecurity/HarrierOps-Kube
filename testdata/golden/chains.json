@@ -1,15 +1,15 @@
 {
   "command_state": "scaffold",
-  "current_behavior": "Family overview and grouped runner. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to run one family from current scope.",
+  "current_behavior": "Family overview and grouped runner. Use `harrierops-kube chains` to see which grouped path is worth reviewing next, then `harrierops-kube chains <family>` to run one family from current scope.",
   "families": [
     {
-      "allowed_claim": "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, stronger control, or sidecar insertion without the explicit control edge and confirmation basis.",
+      "allowed_claim": "Visible app, identity, permission, escalation, and secret clues that line up into a believable path from where you stand now to a stronger workload-linked identity.",
       "best_current_examples": [
         "workloads -> service-accounts -> permissions",
         "workloads -> service-accounts -> privesc",
         "secrets -> workloads -> service-accounts"
       ],
-      "current_gap": "The first runnable family now emits the bounded default row set, can add exact visible patch-surface rows for safe workload fields, and can surface service-account repointing as either one named stronger target or a bounded broader lead when exact target selection would overclaim; sidecar-specific rows stay intentionally suppressed until current scope can prove honest insertion of a new sidecar rather than only changeable sidecar-related workload surfaces.",
+      "current_gap": "Not covered by this family yet: rows that only reach visible token or identity clues still stop before the exact workload-side action is named; broader service-account repointing rows still stop before one exact stronger replacement can be selected honestly; sidecar-specific rows stay suppressed until current evidence proves insertion, not just change surface.",
       "family": "workload-identity-pivot",
       "internal_proof_ladder": [
         {
@@ -29,17 +29,17 @@
           "state": "blocked"
         }
       ],
-      "meaning": "A current foothold can likely influence a workload or workload-linked service account that already carries stronger downstream control.",
+      "meaning": "A current foothold may be able to touch a running app or the identity it uses, then turn that into broader cluster control.",
       "path_type_guide": [
         {
           "default_next_review": "permissions",
-          "meaning": "Current access likely lets the operator change or enter the workload, and the attached service account already changes the next move.",
+          "meaning": "Current access likely lets the operator change or enter the workload, and the attached service account already changes the path immediately.",
           "name": "direct control visible",
           "priority_intent": "highest-value default row type"
         },
         {
           "default_next_review": "workloads",
-          "meaning": "The workload-linked service account path is visible and meaningful, but the stronger control story still depends on deeper workload-side validation.",
+          "meaning": "The workload-linked service account path is visible and meaningful, but the exact workload-side move still is not specific enough to name cleanly.",
           "name": "workload pivot",
           "priority_intent": "below direct control visible, above visibility-limited rows"
         },
@@ -51,7 +51,7 @@
         },
         {
           "default_next_review": "permissions",
-          "meaning": "A real workload-linked identity clue survives, but current scope does not confirm enough of the stronger path to raise it honestly.",
+          "meaning": "A real workload-linked identity clue survives, but current scope still blocks the missing edge needed to keep the stronger path honest.",
           "name": "visibility blocked",
           "priority_intent": "lowest default row type unless the blocked clue still carries unusually strong operator value"
         }
@@ -145,7 +145,7 @@
         }
       ],
       "state": "implemented",
-      "summary": "Follow the shortest visible workload-to-identity pivot toward stronger service-account-backed Kubernetes control."
+      "summary": "Find the shortest visible path from a running app to a stronger identity you may be able to use next."
     }
   ],
   "grouped_command_name": "chains",

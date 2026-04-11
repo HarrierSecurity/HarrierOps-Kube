@@ -6,6 +6,45 @@ const workloadPatchWhyStopHere = "current foothold can change an already running
 const workloadServiceAccountSwitchWhyStopHere = "current foothold can repoint an already running workload toward a stronger visible identity"
 const workloadServiceAccountFallbackWhyStopHere = "current foothold can change the workload identity path, but exact replacement target still needs bounded follow-up"
 
+func ExecIntoPodsMissingConfirmation(namespace string) string {
+	if namespace == "" {
+		return "none; current scope already shows the workload-side action edge through exec access."
+	}
+	return "none; current scope already shows the workload-side action edge through exec access in namespace " + namespace + "."
+}
+
+func ReadSecretsMissingConfirmation(namespace string) string {
+	if namespace == "" {
+		return "none; current scope already shows the secret-read edge that makes this path usable."
+	}
+	return "none; current scope already shows the secret-read edge in namespace " + namespace + "."
+}
+
+func TokenPathVisibleMissingConfirmation() string {
+	return "Current foothold control of that workload or runtime token inspection is not yet proven."
+}
+
+func PatchSurfaceMissingConfirmation(surface string) string {
+	if surface == "" {
+		return "none; current scope already shows the exact workload-changing edge for this row."
+	}
+	return "none; current scope already shows the exact workload-changing edge for the visible " + surface + " surface."
+}
+
+func ExactServiceAccountSwitchMissingConfirmation(namespace string, targetLabel string) string {
+	if namespace == "" && targetLabel == "" {
+		return "none; current scope already shows the exact workload identity change and one stronger replacement target."
+	}
+	if targetLabel == "" {
+		return "none; current scope already shows the exact workload identity change and one stronger replacement target in namespace " + namespace + "."
+	}
+	return "none; current scope already shows the exact workload identity change to " + targetLabel + "."
+}
+
+func BoundedServiceAccountSwitchMissingConfirmation() string {
+	return "Current scope does not justify naming one exact replacement service account yet."
+}
+
 var workloadPatchSurfaceOrder = []string{
 	"image",
 	"command",

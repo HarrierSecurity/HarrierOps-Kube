@@ -186,7 +186,7 @@ func renderTable(command string, payload map[string]any) (string, error) {
 				return "", rowsErr
 			}
 			if len(rows) == 0 {
-				rendered, err = renderSimpleTable([]string{"info"}, [][]string{{"No records"}})
+				rendered, err = renderSimpleTableWithLipgloss([]string{"info"}, [][]string{{"No records"}})
 			} else {
 				headers := collectHeaders(rows)
 				records := make([][]string, 0, len(rows))
@@ -197,7 +197,7 @@ func renderTable(command string, payload map[string]any) (string, error) {
 					}
 					records = append(records, values)
 				}
-				rendered, err = renderSimpleTable(headers, records)
+				rendered, err = renderSimpleTableWithLipgloss(headers, records)
 			}
 		}
 	}
@@ -287,18 +287,24 @@ func renderChainsTable(payload map[string]any) (string, error) {
 		return renderChainsFamilyTable(payload)
 	}
 
-	rows, err := rowsForKey(payload, "families")
+	allRows, err := rowsForKey(payload, "families")
 	if err != nil {
 		return "", err
 	}
+	rows := make([]map[string]any, 0, len(allRows))
+	for _, row := range allRows {
+		if stringify(row["state"]) == "implemented" {
+			rows = append(rows, row)
+		}
+	}
 	if len(rows) == 0 {
-		return renderUnicodeEmptyChainsTable(payload), nil
+		if len(allRows) > 0 {
+			return "harrierops-kube chains\n\n" + renderTriageEmptyState(payload, "No runnable chain families are currently registered. The default overview shows runnable families only."), nil
+		}
+		return "harrierops-kube chains\n\n" + renderTriageEmptyState(payload, "No chain families are currently registered."), nil
 	}
 
-	headers := []string{"family", "state", "summary", "backing commands", "note"}
-	widths := []int{24, 10, 34, 24, 30}
-	records := make([][]string, 0, len(rows))
-	detailBlocks := make([]string, 0, len(rows))
+	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		sourceCommands := "none"
 		if sources, ok := row["source_commands"].([]any); ok && len(sources) > 0 {
@@ -313,29 +319,34 @@ func renderChainsTable(payload map[string]any) (string, error) {
 			}
 		}
 
-		records = append(records, []string{
-			stringify(row["family"]),
-			stringify(row["state"]),
-			stringify(row["summary"]),
-			sourceCommands,
-			chainsFamilyNote(row),
+		records = append(records, detailTableRecord{
+			columns: []string{
+				stringify(row["family"]),
+				stringify(row["summary"]),
+				sourceCommands,
+				chainsFamilyNote(row),
+			},
+			detail: chainsFamilyOperatorGuide(row),
 		})
-		detailBlocks = append(detailBlocks, renderUnicodeDetailTable("contract", unicodeTableInnerWidth(widths), chainsFamilyContract(row)))
 	}
 
-	var builder strings.Builder
-	builder.WriteString(centerTableTitle("harrierops-kube chains", unicodeTableTotalWidth(widths)))
-	builder.WriteByte('\n')
-	builder.WriteString(renderUnicodeTable(headers, widths, records))
-	for _, detail := range detailBlocks {
-		builder.WriteByte('\n')
-		builder.WriteString(detail)
+	rendered, err := renderDetailedTriageTableWithLipgloss(
+		payload,
+		[]string{"family", "summary", "backing commands", "offensive value"},
+		records,
+		"attack briefing",
+		"No runnable chain families are currently registered.",
+		"",
+	)
+	if err != nil {
+		return "", err
 	}
-	builder.WriteByte('\n')
-	builder.WriteString(chainsTakeaway(rows))
-	builder.WriteByte('\n')
-	appendIssueSection(&builder, payload)
-	return builder.String(), nil
+	headerLines := []string{"harrierops-kube chains"}
+	if len(rows) != len(allRows) {
+		omitted := len(allRows) - len(rows)
+		headerLines = append(headerLines, fmt.Sprintf("Showing runnable families only; %d non-runnable famil%s omitted.", omitted, pluralSuffix(omitted, "y", "ies")))
+	}
+	return strings.Join(headerLines, "\n") + "\n\n" + rendered, nil
 }
 
 func renderChainsFamilyTable(payload map[string]any) (string, error) {
@@ -356,14 +367,17 @@ func renderChainsFamilyTable(payload map[string]any) (string, error) {
 		}
 
 		detailParts := []string{}
-		for _, part := range []string{
-			stringify(row["why_stop_here"]),
-			stringify(row["confidence_boundary"]),
-			stringify(row["summary"]),
-		} {
-			if part != "" {
-				detailParts = append(detailParts, part)
-			}
+		if missing := chainsMissingStep(row); missing != "" {
+			detailParts = append(detailParts, "Missing step:\n"+missing)
+		}
+		if boundary := stringify(row["confidence_boundary"]); boundary != "" {
+			detailParts = append(detailParts, "Boundary:\n"+boundary)
+		}
+		if reason := stringify(row["why_stop_here"]); reason != "" {
+			detailParts = append(detailParts, "Why this stops here:\n"+reason)
+		}
+		if summary := stringify(row["summary"]); summary != "" {
+			detailParts = append(detailParts, "Read:\n"+summary)
 		}
 
 		records = append(records, detailTableRecord{
@@ -374,19 +388,19 @@ func renderChainsFamilyTable(payload map[string]any) (string, error) {
 				stringify(row["path_type"]),
 				control,
 				stringify(row["visibility_tier"]),
-				stringify(row["next_review"]),
+				chainsMissingStep(row),
 			},
-			detail: strings.Join(detailParts, " "),
+			detail: strings.Join(detailParts, "\n\n"),
 		})
 	}
 
 	rendered, err := renderDetailedTriageTableWithLipgloss(
 		payload,
-		[]string{"priority", "workload", "subversion point", "path type", "kubernetes control", "visibility", "next review"},
+		[]string{"priority", "workload", "subversion point", "path type", "kubernetes control", "visibility", "missing step"},
 		records,
 		"note",
 		"No bounded workload-identity pivot rows were confirmed from current scope.",
-		"workload-identity pivot row(s)",
+		"",
 	)
 	if err != nil {
 		return "", err
@@ -929,86 +943,52 @@ func workloadAttackAngle(row map[string]any) string {
 	return strings.Join(parts, " ")
 }
 
-func renderUnicodeEmptyChainsTable(payload map[string]any) string {
-	headers := []string{"info"}
-	widths := []int{56}
-
-	var builder strings.Builder
-	builder.WriteString(centerTableTitle("harrierops-kube chains", unicodeTableTotalWidth(widths)))
-	builder.WriteByte('\n')
-	builder.WriteString(renderUnicodeTable(headers, widths, [][]string{{"No chain families are currently registered."}}))
-	builder.WriteString("\nTakeaway: 0 registered chain families.\n")
-	appendIssueSection(&builder, payload)
-	return builder.String()
-}
-
 func chainsFamilyNote(row map[string]any) string {
+	if meaning := stringify(row["meaning"]); meaning != "" {
+		return meaning
+	}
 	if stringify(row["state"]) == "planned" {
 		return "Scaffold only; runnable grouped path rows are not implemented yet."
 	}
-	return stringify(row["allowed_claim"])
+	return stringify(row["summary"])
 }
 
-func chainsFamilyContract(row map[string]any) string {
-	parts := []string{
-		"Claim boundary: " + stringify(row["allowed_claim"]),
-		"Current family gap: " + stringify(row["current_gap"]),
-	}
-	if shape := stringifyChainsRowShape(row["planned_row_shape"]); shape != "" {
-		parts = append(parts, "Planned row shape: "+shape)
+// Keep the grouped-family truth model, but render it with operator-facing labels
+// so the overview reads like an attack briefing instead of internal contract prose.
+func chainsFamilyOperatorGuide(row map[string]any) string {
+	sections := []string{
+		"What this surfaces:\n" + chainsOperatorQuestion(row),
+		"Current family coverage:\n" + stringify(row["allowed_claim"]),
+		"Current family coverage limits:\n" + stringify(row["current_gap"]),
 	}
 	if guide := stringifyChainsPathTypeGuide(row["path_type_guide"]); guide != "" {
-		parts = append(parts, "Path type guide: "+guide)
-	}
-	if ladder := stringifyChainsProofLadder(row["internal_proof_ladder"]); ladder != "" {
-		parts = append(parts, "Internal proof ladder: "+ladder)
+		sections = append(sections, "Row types you may see:\n- "+strings.ReplaceAll(guide, " | ", "\n- "))
 	}
 	if examples := stringifyAnySlice(row["best_current_examples"], "; "); examples != "" {
-		parts = append(parts, "Example joins: "+examples)
+		sections = append(sections, "Current evidence joins in this family:\n- "+strings.ReplaceAll(examples, "; ", "\n- "))
 	}
-	return strings.Join(parts, " ")
+	return strings.Join(sections, "\n\n")
 }
 
-func chainsTakeaway(rows []map[string]any) string {
-	stateCounts := map[string]int{}
-	familyNames := make([]string, 0, len(rows))
-	for _, row := range rows {
-		stateCounts[stringify(row["state"])]++
-		familyNames = append(familyNames, stringify(row["family"]))
+func chainsOperatorQuestion(row map[string]any) string {
+	if summary := stringify(row["summary"]); summary != "" {
+		return summary
 	}
-	sort.Strings(familyNames)
-
-	parts := []string{fmt.Sprintf("Takeaway: %d registered chain famil", len(rows))}
-	if len(rows) == 1 {
-		parts[0] += "y"
-	} else {
-		parts[0] += "ies"
+	if meaning := stringify(row["meaning"]); meaning != "" {
+		return meaning
 	}
-	if planned := stateCounts["planned"]; planned > 0 {
-		parts = append(parts, fmt.Sprintf("%d planned", planned))
-	}
-	if implemented := stateCounts["implemented"]; implemented > 0 {
-		parts = append(parts, fmt.Sprintf("%d implemented", implemented))
-	}
-	if len(familyNames) > 0 {
-		parts = append(parts, strings.Join(familyNames, ", "))
-	}
-	return strings.Join(parts, "; ") + "."
+	return "Which grouped path family is most worth running from current scope?"
 }
 
-func stringifyChainsRowShape(value any) string {
-	items, ok := value.([]any)
-	if !ok || len(items) == 0 {
-		return ""
+func chainsMissingStep(row map[string]any) string {
+	return stringify(row["missing_confirmation"])
+}
+
+func pluralSuffix(count int, singular string, plural string) string {
+	if count == 1 {
+		return singular
 	}
-	parts := make([]string, 0, len(items))
-	for _, item := range items {
-		part := strings.ReplaceAll(stringify(item), "_", " ")
-		if part != "" {
-			parts = append(parts, part)
-		}
-	}
-	return strings.Join(parts, " | ")
+	return plural
 }
 
 func stringifyChainsPathTypeGuide(value any) string {
@@ -1024,36 +1004,10 @@ func stringifyChainsPathTypeGuide(value any) string {
 		}
 		name := stringify(mapping["name"])
 		meaning := stringify(mapping["meaning"])
-		nextReview := stringify(mapping["default_next_review"])
 		if name == "" || meaning == "" {
 			continue
 		}
-		part := name + ": " + meaning
-		if nextReview != "" {
-			part += " Next review: " + nextReview + "."
-		}
-		parts = append(parts, part)
-	}
-	return strings.Join(parts, " | ")
-}
-
-func stringifyChainsProofLadder(value any) string {
-	items, ok := value.([]any)
-	if !ok || len(items) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(items))
-	for _, item := range items {
-		mapping, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		state := stringify(mapping["state"])
-		meaning := stringify(mapping["meaning"])
-		if state == "" || meaning == "" {
-			continue
-		}
-		parts = append(parts, state+": "+meaning)
+		parts = append(parts, name+": "+meaning)
 	}
 	return strings.Join(parts, " | ")
 }
@@ -1078,33 +1032,6 @@ type detailTableRecord struct {
 	detail  string
 }
 
-func renderDetailedTriageTable(payload map[string]any, headers []string, records []detailTableRecord, detailLabel string, emptyMessage string, takeawayNoun string) (string, error) {
-	if len(records) == 0 {
-		return renderTriageEmptyState(payload, emptyMessage), nil
-	}
-
-	rawRecords := make([][]string, 0, len(records))
-	for _, record := range records {
-		rawRecords = append(rawRecords, record.columns)
-	}
-	widths := boundedASCIIWidths(headers, rawRecords)
-
-	var builder strings.Builder
-	for index, record := range records {
-		rendered, err := renderDetailedRecordTable(headers, widths, record.columns, detailLabel, record.detail)
-		if err != nil {
-			return "", err
-		}
-		builder.WriteString(rendered)
-		if index != len(records)-1 {
-			builder.WriteByte('\n')
-		}
-	}
-	appendIssueSection(&builder, payload)
-	appendTakeaway(&builder, takeawayNoun, records)
-	return builder.String(), nil
-}
-
 func renderDetailedTriageTableWithLipgloss(payload map[string]any, headers []string, records []detailTableRecord, detailLabel string, emptyMessage string, takeawayNoun string) (string, error) {
 	if len(records) == 0 {
 		return renderTriageEmptyState(payload, emptyMessage), nil
@@ -1127,8 +1054,9 @@ func renderDetailedTriageTableWithLipgloss(payload map[string]any, headers []str
 			builder.WriteByte('\n')
 		}
 	}
-	appendIssueSection(&builder, payload)
-	appendTakeaway(&builder, takeawayNoun, records)
+	spanWidth := asciiTableSpanWidth(widths)
+	appendIssueSection(&builder, payload, spanWidth)
+	appendTakeaway(&builder, takeawayNoun, records, spanWidth)
 	return builder.String(), nil
 }
 
@@ -1138,22 +1066,22 @@ func renderTriageEmptyState(payload map[string]any, emptyMessage string) string 
 	if err == nil {
 		builder.WriteString(rendered)
 	}
-	appendIssueSection(&builder, payload)
+	appendIssueSection(&builder, payload, 0)
 	return builder.String()
 }
 
-func appendIssueSection(builder *strings.Builder, payload map[string]any) {
+func appendIssueSection(builder *strings.Builder, payload map[string]any, width int) {
 	issues, ok := payload["issues"].([]any)
 	if !ok || len(issues) == 0 {
 		return
 	}
 
-	records := make([][]string, 0, len(issues))
+	rows := make([]string, 0, len(issues))
 	for _, issue := range issues {
-		records = append(records, []string{formatIssue(issue)})
+		rows = append(rows, formatIssue(issue))
 	}
 
-	rendered, err := renderSimpleTableWithLipgloss([]string{"Issues"}, records)
+	rendered, err := renderLabeledRowsTable(width, "Issues", rows)
 	if err != nil {
 		return
 	}
@@ -1165,7 +1093,7 @@ func appendIssueSection(builder *strings.Builder, payload map[string]any) {
 	}
 }
 
-func appendTakeaway(builder *strings.Builder, noun string, records []detailTableRecord) {
+func appendTakeaway(builder *strings.Builder, noun string, records []detailTableRecord, width int) {
 	if noun == "" || len(records) == 0 {
 		return
 	}
@@ -1181,12 +1109,44 @@ func appendTakeaway(builder *strings.Builder, noun string, records []detailTable
 		}
 	}
 
-	builder.WriteString("\nTakeaway: ")
-	builder.WriteString(fmt.Sprintf("%d visible %s", len(records), noun))
+	summary := fmt.Sprintf("%d visible %s", len(records), noun)
 	if counts["high"] > 0 || counts["medium"] > 0 || counts["low"] > 0 {
-		builder.WriteString(fmt.Sprintf("; %d high, %d medium, %d low", counts["high"], counts["medium"], counts["low"]))
+		summary += fmt.Sprintf("; %d high, %d medium, %d low", counts["high"], counts["medium"], counts["low"])
 	}
-	builder.WriteString(".\n")
+	summary += "."
+
+	rendered, err := renderLabeledRowsTable(width, "Takeaway:", []string{summary})
+	if err != nil {
+		builder.WriteString("\nTakeaway: ")
+		builder.WriteString(summary)
+		builder.WriteByte('\n')
+		return
+	}
+
+	builder.WriteByte('\n')
+	builder.WriteString(rendered)
+	if !strings.HasSuffix(rendered, "\n") {
+		builder.WriteByte('\n')
+	}
+}
+
+func renderLabeledRowsTable(width int, label string, rows []string) (string, error) {
+	if len(rows) == 0 {
+		return "", nil
+	}
+	if width <= 0 {
+		records := make([][]string, 0, len(rows))
+		for _, row := range rows {
+			records = append(records, []string{row})
+		}
+		return renderSimpleTableWithLipgloss([]string{label}, records)
+	}
+
+	table := newCalloutLipglossTable(width, label)
+	for _, row := range rows {
+		table.Row(row)
+	}
+	return table.String(), nil
 }
 
 func formatIssue(issue any) string {
@@ -1211,34 +1171,6 @@ func formatIssue(issue any) string {
 		return message
 	}
 	return stringify(issue)
-}
-
-func renderSimpleTable(headers []string, records [][]string) (string, error) {
-	if len(headers) == 0 {
-		return "", nil
-	}
-
-	widths := boundedASCIIWidths(headers, records)
-
-	var builder strings.Builder
-	border := asciiTableBorder(widths)
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-	for _, line := range asciiWrappedRowLines(headers, widths) {
-		builder.WriteString(line)
-		builder.WriteByte('\n')
-	}
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-	for _, record := range records {
-		for _, line := range asciiWrappedRowLines(record, widths) {
-			builder.WriteString(line)
-			builder.WriteByte('\n')
-		}
-	}
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-	return builder.String(), nil
 }
 
 func renderSimpleTableWithLipgloss(headers []string, records [][]string) (string, error) {
@@ -1278,43 +1210,6 @@ func renderUnicodeDetailTable(header string, width int, detail string) string {
 	widths := []int{width}
 	records := [][]string{{detail}}
 	return renderUnicodeTable(headers, widths, records)
-}
-
-func renderDetailedRecordTable(headers []string, widths []int, record []string, detailLabel string, detail string) (string, error) {
-	if len(headers) == 0 {
-		return "", nil
-	}
-
-	border := asciiTableBorder(widths)
-	var builder strings.Builder
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-	for _, line := range asciiWrappedRowLines(headers, widths) {
-		builder.WriteString(line)
-		builder.WriteByte('\n')
-	}
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-
-	for _, line := range asciiWrappedRowLines(record, widths) {
-		builder.WriteString(line)
-		builder.WriteByte('\n')
-	}
-
-	if detail != "" {
-		builder.WriteString(border)
-		builder.WriteByte('\n')
-		detailRendered, err := renderAttachedFullWidthDetailTable(asciiTableSpanWidth(widths), detailLabel, detail)
-		if err != nil {
-			return "", err
-		}
-		builder.WriteString(detailRendered)
-		return builder.String(), nil
-	}
-
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-	return builder.String(), nil
 }
 
 func renderDetailedRecordTableWithLipgloss(headers []string, widths []int, record []string, detailLabel string, detail string) (string, error) {
@@ -1368,6 +1263,24 @@ func newAttachedDetailLipglossTable(width int, label string) *liptable.Table {
 		})
 }
 
+func newCalloutLipglossTable(width int, label string) *liptable.Table {
+	return liptable.New().
+		Border(lipgloss.ASCIIBorder()).
+		BorderTop(true).
+		BorderBottom(true).
+		BorderLeft(true).
+		BorderRight(true).
+		BorderHeader(true).
+		BorderColumn(true).
+		BorderRow(false).
+		Headers(label).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			return lipgloss.NewStyle().
+				Padding(0, 1).
+				Width(lipglossCellWidth(width))
+		})
+}
+
 func lipglossColumnWidth(widths []int, index int) int {
 	if index < 0 || index >= len(widths) {
 		return 0
@@ -1404,16 +1317,6 @@ func selectLootRows(rows []map[string]any) []map[string]any {
 		selected = append(selected, rows[:limit]...)
 	}
 	return selected
-}
-
-func asciiTableBorder(widths []int) string {
-	var builder strings.Builder
-	builder.WriteByte('+')
-	for _, width := range widths {
-		builder.WriteString(strings.Repeat("-", width+2))
-		builder.WriteByte('+')
-	}
-	return builder.String()
 }
 
 func unicodeTableBorder(widths []int, left rune, middle rune, right rune, fill rune) string {
@@ -1489,94 +1392,6 @@ func centerTableTitle(title string, width int) string {
 	left := padding / 2
 	right := padding - left
 	return strings.Repeat(" ", left) + title + strings.Repeat(" ", right)
-}
-
-func asciiTableRow(values []string, widths []int) string {
-	var builder strings.Builder
-	builder.WriteByte('|')
-	for index, width := range widths {
-		value := ""
-		if index < len(values) {
-			value = normalizeTableCell(values[index])
-		}
-		builder.WriteByte(' ')
-		builder.WriteString(value)
-		builder.WriteString(strings.Repeat(" ", width-len(value)))
-		builder.WriteByte(' ')
-		builder.WriteByte('|')
-	}
-	return builder.String()
-}
-
-func asciiWrappedRowLines(values []string, widths []int) []string {
-	wrappedColumns := make([][]string, len(widths))
-	maxLines := 1
-	for index, width := range widths {
-		value := ""
-		if index < len(values) {
-			value = values[index]
-		}
-		wrapped := wrapTableText(value, width)
-		if len(wrapped) == 0 {
-			wrapped = []string{""}
-		}
-		wrappedColumns[index] = wrapped
-		if len(wrapped) > maxLines {
-			maxLines = len(wrapped)
-		}
-	}
-
-	lines := make([]string, 0, maxLines)
-	for lineIndex := 0; lineIndex < maxLines; lineIndex++ {
-		row := make([]string, len(widths))
-		for columnIndex := range widths {
-			if lineIndex < len(wrappedColumns[columnIndex]) {
-				row[columnIndex] = wrappedColumns[columnIndex][lineIndex]
-			}
-		}
-		lines = append(lines, asciiTableRow(row, widths))
-	}
-	return lines
-}
-
-func asciiTableDetailRow(value string, width int) string {
-	var builder strings.Builder
-	text := normalizeTableCell(value)
-	builder.WriteByte('|')
-	builder.WriteByte(' ')
-	builder.WriteString(text)
-	builder.WriteString(strings.Repeat(" ", width-len(text)))
-	builder.WriteByte(' ')
-	builder.WriteByte('|')
-	return builder.String()
-}
-
-func asciiTableSpanningRow(value string, width int) string {
-	return asciiTableDetailRow(value, width)
-}
-
-func renderAttachedFullWidthDetailTable(width int, label string, detail string) (string, error) {
-	if width <= 0 {
-		return "", nil
-	}
-
-	return renderAttachedFullWidthDetailTableBody(width, label, detail), nil
-}
-
-func renderAttachedFullWidthDetailTableBody(width int, label string, detail string) string {
-	var builder strings.Builder
-	border := asciiTableBorder([]int{width})
-	builder.WriteString(asciiTableSpanningRow(label, width))
-	builder.WriteByte('\n')
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-	for _, line := range wrapTableText(detail, width) {
-		builder.WriteString(asciiTableSpanningRow(line, width))
-		builder.WriteByte('\n')
-	}
-	builder.WriteString(border)
-	builder.WriteByte('\n')
-	return builder.String()
 }
 
 func asciiTableSpanWidth(widths []int) int {
@@ -1657,7 +1472,14 @@ func boundedASCIIWidths(headers []string, records [][]string) []int {
 }
 
 func asciiTableTotalWidth(widths []int) int {
-	return len(asciiTableBorder(widths))
+	if len(widths) == 0 {
+		return 1
+	}
+	total := 1
+	for _, width := range widths {
+		total += width + 3
+	}
+	return total
 }
 
 func wrapTableText(value string, width int) []string {

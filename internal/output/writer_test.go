@@ -78,6 +78,7 @@ func TestRenderTableWrapsLongDetailedRows(t *testing.T) {
 	for _, want := range []string{
 		"attack angle",
 		"authorization API",
+		"Takeaway",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
@@ -86,7 +87,7 @@ func TestRenderTableWrapsLongDetailedRows(t *testing.T) {
 }
 
 func TestRenderDetailedRecordTableClosesRowBoxBeforeDetailSection(t *testing.T) {
-	rendered, err := renderDetailedRecordTable(
+	rendered, err := renderDetailedRecordTableWithLipgloss(
 		[]string{"priority", "workload"},
 		[]int{8, 17},
 		[]string{"high", "default/fox-admin"},
@@ -94,7 +95,7 @@ func TestRenderDetailedRecordTableClosesRowBoxBeforeDetailSection(t *testing.T) 
 		"this workload may be able to control other containers on the same machine.",
 	)
 	if err != nil {
-		t.Fatalf("renderDetailedRecordTable() error = %v", err)
+		t.Fatalf("renderDetailedRecordTableWithLipgloss() error = %v", err)
 	}
 
 	lines := strings.Split(rendered, "\n")
@@ -315,6 +316,7 @@ func TestRenderChainsFamilyTableShowsSelectedFamilyHeaderAndTakeaway(t *testing.
 				"why_stop_here":             "current foothold can change an already running workload with stronger identity",
 				"confidence_boundary":       "Current scope confirms the workload service account field is changeable.",
 				"summary":                   "visible target and action edge align cleanly",
+				"missing_confirmation":      "none; current scope already shows the exact workload identity change to default/fox-admin.",
 			},
 			map[string]any{
 				"priority":                  "medium",
@@ -327,6 +329,7 @@ func TestRenderChainsFamilyTableShowsSelectedFamilyHeaderAndTakeaway(t *testing.
 				"why_stop_here":             "runtime token inspection is not yet proven",
 				"confidence_boundary":       "Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
 				"summary":                   "visible target and identity path are present",
+				"missing_confirmation":      "Current foothold control of that workload or runtime token inspection is not yet proven.",
 			},
 		},
 	}
@@ -349,18 +352,57 @@ func TestRenderChainsFamilyTableShowsSelectedFamilyHeaderAndTakeaway(t *testing.
 		"workload-linked",
 		"token path on",
 		"default/fox-admin",
-		"Takeaway: 2 visible workload-identity pivot row(s); 1 high, 1 medium, 0 low.",
+		"Missing step:",
+		"Boundary:",
+		"Why this stops here:",
+		"Read:",
 	} {
 		if !strings.Contains(normalized, want) {
 			t.Fatalf("rendered output missing %q in %q", want, normalized)
 		}
 	}
+	if !strings.Contains(rendered, "harrierops-kube chains workload-identity-pivot") {
+		t.Fatalf("rendered output missing raw title in %q", rendered)
+	}
+	if strings.Contains(rendered, "Takeaway:") {
+		t.Fatalf("rendered output should not include generic takeaway block in %q", rendered)
+	}
+}
+
+func TestRenderChainsFamilyTableSeparatesDetailClauses(t *testing.T) {
+	payload := map[string]any{
+		"family":           "workload-identity-pivot",
+		"summary":          "1 workload-linked identity path is ready for first review.",
+		"backing_commands": []any{"workloads", "service-accounts", "permissions", "secrets"},
+		"paths": []any{
+			map[string]any{
+				"priority":                  "high",
+				"source_asset":              "default/fox-admin",
+				"subversion_point":          "review visible workload-linked token path",
+				"path_type":                 "direct control not confirmed",
+				"likely_kubernetes_control": "attached service account has cluster-wide admin-like access",
+				"visibility_tier":           "medium",
+				"missing_confirmation":      "Current foothold control of that workload or runtime token inspection is not yet proven.",
+				"why_stop_here":             "current scope can see a workload-linked token path on stronger identity",
+				"confidence_boundary":       "Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
+				"summary":                   "Current scope can see the workload and stronger identity story, but it does not yet show the exact workload-side lever.",
+			},
+		},
+	}
+
+	rendered, err := Render("table", "chains", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
 	for _, want := range []string{
-		"harrierops-kube chains workload-identity-pivot",
-		"Takeaway: 2 visible workload-identity pivot row(s); 1 high, 1 medium, 0 low.",
+		"| Missing step:",
+		"| Boundary:",
+		"| Why this stops here:",
+		"| Read:",
 	} {
 		if !strings.Contains(rendered, want) {
-			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
+			t.Fatalf("rendered family note did not keep clause break %q in %q", want, rendered)
 		}
 	}
 }
@@ -396,5 +438,133 @@ func TestRenderChainsFamilyTableKeepsFamilyContextInEmptyState(t *testing.T) {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
 		}
+	}
+}
+
+func TestRenderChainsOverviewUsesSharedBoxedRendererWithoutSplittingImplemented(t *testing.T) {
+	payload := map[string]any{
+		"families": []any{
+			map[string]any{
+				"family":        "workload-identity-pivot",
+				"state":         "implemented",
+				"summary":       "Find the shortest visible path from a running app to a stronger identity you may be able to use next.",
+				"meaning":       "A current foothold may be able to touch a running app or the identity it uses, then turn that into broader cluster control.",
+				"allowed_claim": "Visible app, identity, permission, escalation, and secret clues line up into a believable path toward a stronger workload-linked identity.",
+				"current_gap":   "You still need workload-side follow-up before naming one exact patch step or stronger replacement identity.",
+				"best_current_examples": []any{
+					"workloads -> service-accounts -> permissions",
+					"workloads -> service-accounts -> privesc",
+				},
+				"path_type_guide": []any{
+					map[string]any{
+						"name":                "direct control visible",
+						"meaning":             "Current access likely lets the operator change or enter the workload.",
+						"default_next_review": "permissions",
+					},
+				},
+				"source_commands": []any{
+					map[string]any{"command": "workloads"},
+					map[string]any{"command": "service-accounts"},
+					map[string]any{"command": "permissions"},
+				},
+			},
+		},
+	}
+
+	rendered, err := Render("table", "chains", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
+	assertUniformTableWidth(t, rendered)
+	if strings.Contains(rendered, "┏") {
+		t.Fatalf("chains overview still rendered with the old unicode layout: %q", rendered)
+	}
+	for _, want := range []string{
+		"harrierops-kube chains",
+		"attack briefing",
+		"What this surfaces:",
+		"offensive value",
+		"Current family coverage:",
+		"Current family coverage limits:",
+		"Current evidence joins in this family:",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered output missing raw text %q in %q", want, rendered)
+		}
+	}
+	for _, oldLabel := range []string{
+		"implemented",
+		"allowed claim",
+		"current gap",
+		"path type guide",
+		"internal proof ladder",
+		"operator guide",
+		"why run next",
+		"Takeaway:",
+		"Scope starts with:",
+		"Scope ends before:",
+		"Best pivots after this:",
+	} {
+		if strings.Contains(rendered, oldLabel) {
+			t.Fatalf("chains overview regressed to maintainer-facing label %q in %q", oldLabel, rendered)
+		}
+	}
+}
+
+func TestRenderChainsOverviewMakesRunnableFilterExplicitWhenRowsAreOmitted(t *testing.T) {
+	payload := map[string]any{
+		"families": []any{
+			map[string]any{
+				"family":        "workload-identity-pivot",
+				"state":         "implemented",
+				"summary":       "Find the shortest visible path from a running app to a stronger identity you may be able to use next.",
+				"meaning":       "A current foothold may be able to touch a running app or the identity it uses, then turn that into broader cluster control.",
+				"allowed_claim": "Visible app, identity, permission, escalation, and secret clues that line up into a believable path from where you stand now to a stronger workload-linked identity.",
+				"current_gap":   "Not covered by this family yet: rows that only reach visible token or identity clues still stop before the exact workload-side action is named.",
+				"source_commands": []any{
+					map[string]any{"command": "workloads"},
+				},
+			},
+			map[string]any{
+				"family":  "future-family",
+				"state":   "planned",
+				"summary": "Future family.",
+			},
+		},
+	}
+
+	rendered, err := Render("table", "chains", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
+	if !strings.Contains(rendered, "Showing runnable families only; 1 non-runnable family omitted.") {
+		t.Fatalf("rendered output missing runnable-filter notice in %q", rendered)
+	}
+	if strings.Contains(rendered, "future-family") {
+		t.Fatalf("rendered output leaked omitted non-runnable family in %q", rendered)
+	}
+}
+
+func TestRenderChainsOverviewEmptyStateDistinguishesNoRunnableFromNoRegistered(t *testing.T) {
+	payload := map[string]any{
+		"families": []any{
+			map[string]any{
+				"family":  "future-family",
+				"state":   "planned",
+				"summary": "Future family.",
+			},
+		},
+	}
+
+	rendered, err := Render("table", "chains", payload)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+
+	normalized := testutil.NormalizeTableText(rendered)
+	if !strings.Contains(normalized, "No runnable chain families are currently registered. The default overview shows runnable families only.") {
+		t.Fatalf("rendered output missing runnable-only empty-state clarification in %q", rendered)
 	}
 }
