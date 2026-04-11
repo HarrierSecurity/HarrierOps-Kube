@@ -13,29 +13,15 @@ import (
 	"harrierops-kube/internal/model"
 	"harrierops-kube/internal/output"
 	"harrierops-kube/internal/provider"
+	"harrierops-kube/internal/testutil"
 )
 
 func normalizedRenderText(text string) string {
-	return strings.Join(strings.Fields(text), " ")
+	return testutil.NormalizeWhitespace(text)
 }
 
 func normalizedTableText(text string) string {
-	lines := strings.Split(text, "\n")
-	parts := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		if strings.Trim(trimmed, "+-|") == "" {
-			continue
-		}
-		trimmed = strings.TrimPrefix(trimmed, "|")
-		trimmed = strings.TrimSuffix(trimmed, "|")
-		trimmed = strings.ReplaceAll(trimmed, "|", " ")
-		parts = append(parts, trimmed)
-	}
-	return strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
+	return testutil.NormalizeTableText(text)
 }
 
 func TestCLICommandsSmoke(t *testing.T) {
@@ -376,7 +362,7 @@ func TestChainsHelpShowsRunnableFamilyTopic(t *testing.T) {
 		"internal proof ladder",
 		"kubernetes control",
 		"Live row wording stays evidence-bounded",
-		"Exact non-env workload patch-surface rows stay suppressed unless the family can tie the exact action edge and visible change surface to the same workload honestly.",
+		"Exact patch-surface rows now stay limited to safe visible workload fields the family can tie to the same workload honestly; sidecar-specific wording remains suppressed.",
 		"Service-account repointing rows name one exact replacement only when current scope makes that target specific; otherwise the family keeps the lead broader.",
 		"harrierops-kube chains workload-identity-pivot --output table",
 	} {
@@ -616,7 +602,7 @@ func TestChainsTableOutputStaysOperatorReadable(t *testing.T) {
 		"confirmed",
 		"attached service",
 		"account has",
-		"cluster-wide admin-like access",
+		"admin-like access",
 		"medium",
 		"Current scope confirms a workload-linked token path is visible, but runtime inspection is not yet proven.",
 	} {
@@ -727,72 +713,25 @@ func TestBuildSelectedChainPayloadKeepsRunnableRowsWhenExposureSupportReadFails(
 
 func TestBuildSelectedChainPayloadBuildsExactEnvPatchRowWhenCurrentSessionCanPatchPods(t *testing.T) {
 	namespace := "default"
-	payload, err := buildSelectedChainPayload(stubInventoryProvider{
-		metadataContext: model.MetadataContext{
-			ContextName: "lab-cluster",
-			ClusterName: "lab-cluster",
-			Namespace:   namespace,
+	payload, err := buildSelectedChainPayload(workloadIdentityPivotProviderStub(
+		namespace,
+		[]model.Workload{
+			testPodWorkload(workloadSpec{
+				Name:               "fox-admin",
+				Namespace:          namespace,
+				ServiceAccountName: "fox-admin",
+				Images:             []string{"ghcr.io/example/fox-admin:latest"},
+				EnvNames:           []string{"TOKEN_PATH"},
+			}),
 		},
-		whoamiData: model.WhoAmIData{
-			CurrentIdentity: model.CurrentIdentity{
-				Label:      "fox-operator",
-				Kind:       "User",
-				Confidence: "direct",
-			},
+		[]model.ServiceAccount{
+			testServiceAccount(serviceAccountSpec{Name: "fox-admin", Namespace: namespace}),
 		},
-		workloadsData: model.WorkloadsData{
-			WorkloadAssets: []model.Workload{
-				{
-					ID:                 "pod:default:fox-admin",
-					Name:               "fox-admin",
-					Namespace:          namespace,
-					Kind:               "Pod",
-					ServiceAccountName: "fox-admin",
-					Images:             []string{"ghcr.io/example/fox-admin:latest"},
-					EnvNames:           []string{"TOKEN_PATH"},
-				},
-			},
+		[]model.RBACGrant{
+			testCurrentSessionWorkloadActionGrant(namespace, "patch", "pods", "can patch pods"),
+			testServiceAccountGrant(namespace, "fox-admin", "fox-admin-cluster-admin", "cluster-wide", "admin-like wildcard access"),
 		},
-		serviceAccountsData: model.ServiceAccountsData{
-			ServiceAccounts: []model.ServiceAccount{
-				{
-					ID:        "serviceaccount:default:fox-admin",
-					Name:      "fox-admin",
-					Namespace: namespace,
-				},
-			},
-		},
-		rbacData: model.RBACData{
-			RoleGrants: []model.RBACGrant{
-				{
-					ID:             "grant:user:patch-pods",
-					BindingName:    "user-patch-pods",
-					Scope:          "namespace/default",
-					SubjectKind:    "User",
-					SubjectName:    "fox-operator",
-					EvidenceStatus: "direct",
-					WorkloadActions: []model.WorkloadAction{
-						{
-							Verb:            "patch",
-							TargetGroup:     "pods",
-							TargetResources: []string{"pods"},
-							Summary:         "can patch pods",
-						},
-					},
-				},
-				{
-					ID:               "grant:sa:cluster-admin",
-					BindingName:      "fox-admin-cluster-admin",
-					Scope:            "cluster-wide",
-					SubjectKind:      "ServiceAccount",
-					SubjectName:      "fox-admin",
-					SubjectNamespace: &namespace,
-					EvidenceStatus:   "direct",
-					DangerousRights:  []string{"admin-like wildcard access"},
-				},
-			},
-		},
-	}, provider.QueryOptions{}, "workload-identity-pivot")
+	), provider.QueryOptions{}, "workload-identity-pivot")
 	if err != nil {
 		t.Fatalf("buildSelectedChainPayload() error = %v", err)
 	}
@@ -802,131 +741,137 @@ func TestBuildSelectedChainPayloadBuildsExactEnvPatchRowWhenCurrentSessionCanPat
 		t.Fatalf("paths = %#v, want non-empty []any", payload["paths"])
 	}
 
-	found := false
-	for _, raw := range paths {
-		row := requireMap(t, raw)
-		if row["subversion_point"] != "patch env on workload default/fox-admin" {
-			continue
-		}
-		found = true
-		if row["path_type"] != "direct control visible" {
-			t.Fatalf("path_type = %v, want direct control visible", row["path_type"])
-		}
-		if row["visibility_tier"] != "high" {
-			t.Fatalf("visibility_tier = %v, want high", row["visibility_tier"])
-		}
-		if row["confidence_boundary"] != "Current scope confirms these workload fields are changeable: image, env, service account." {
-			t.Fatalf("confidence_boundary = %v", row["confidence_boundary"])
+	rowsBySubversionPoint := chainRowsBySubversionPoint(t, paths)
+	wantSubversionPoint := "patch env on workload default/fox-admin"
+	rows := rowsBySubversionPoint[wantSubversionPoint]
+	if len(rows) != 1 {
+		t.Fatalf("rows[%q] = %#v, want exactly one exact env patch row", wantSubversionPoint, rows)
+	}
+	row := rows[0]
+	for _, alsoExpected := range []string{
+		"patch env on workload default/fox-admin",
+		"patch image on workload default/fox-admin",
+	} {
+		if len(rowsBySubversionPoint[alsoExpected]) != 1 {
+			t.Fatalf("rows[%q] = %#v, want exactly one supported row", alsoExpected, rowsBySubversionPoint[alsoExpected])
 		}
 	}
-	if !found {
-		t.Fatalf("paths = %#v, want exact env patch row", paths)
+	if len(rowsBySubversionPoint) != 2 {
+		t.Fatalf("rowsBySubversionPoint = %#v, want exactly the visible exact rows for image and env", rowsBySubversionPoint)
+	}
+	if row["path_type"] != "direct control visible" {
+		t.Fatalf("path_type = %v, want direct control visible", row["path_type"])
+	}
+	if row["visibility_tier"] != "high" {
+		t.Fatalf("visibility_tier = %v, want high", row["visibility_tier"])
+	}
+	if row["confidence_boundary"] != "Current scope confirms these workload fields are changeable: image, env, service account." {
+		t.Fatalf("confidence_boundary = %v", row["confidence_boundary"])
+	}
+}
+
+func TestBuildSelectedChainPayloadBuildsBroaderExactPatchSurfaceRowsWhenVisible(t *testing.T) {
+	namespace := "default"
+	payload, err := buildSelectedChainPayload(workloadIdentityPivotProviderStub(
+		namespace,
+		[]model.Workload{
+			testPodWorkload(workloadSpec{
+				Name:               "fox-admin",
+				Namespace:          namespace,
+				ServiceAccountName: "fox-admin",
+				Images:             []string{"ghcr.io/example/fox-admin:latest"},
+				Command:            []string{"/bin/sh"},
+				Args:               []string{"-c", "sleep 3600"},
+				EnvNames:           []string{"TOKEN_PATH"},
+				MountedSecretRefs:  []string{"fox-admin-token"},
+				MountedConfigRefs:  []string{"fox-admin-config"},
+				InitContainers:     []string{"init-permissions"},
+				Sidecars:           []string{"log-shipper"},
+			}),
+		},
+		[]model.ServiceAccount{
+			testServiceAccount(serviceAccountSpec{Name: "fox-admin", Namespace: namespace}),
+		},
+		[]model.RBACGrant{
+			testCurrentSessionWorkloadActionGrant(namespace, "patch", "pods", "can patch pods"),
+			testServiceAccountGrant(namespace, "fox-admin", "fox-admin-cluster-admin", "cluster-wide", "admin-like wildcard access"),
+		},
+	), provider.QueryOptions{}, "workload-identity-pivot")
+	if err != nil {
+		t.Fatalf("buildSelectedChainPayload() error = %v", err)
+	}
+
+	paths, ok := payload["paths"].([]any)
+	if !ok || len(paths) == 0 {
+		t.Fatalf("paths = %#v, want non-empty []any", payload["paths"])
+	}
+
+	rowsBySubversionPoint := chainRowsBySubversionPoint(t, paths)
+
+	for subversionPoint, rows := range rowsBySubversionPoint {
+		if len(rows) != 1 {
+			t.Fatalf("rows[%q] = %#v, want exactly one row per exact patch surface", subversionPoint, rows)
+		}
+	}
+
+	for _, want := range []string{
+		"patch image on workload default/fox-admin",
+		"patch command on workload default/fox-admin",
+		"patch args on workload default/fox-admin",
+		"patch env on workload default/fox-admin",
+		"patch mounted secret refs on workload default/fox-admin",
+		"patch mounted config refs on workload default/fox-admin",
+		"patch init containers on workload default/fox-admin",
+	} {
+		if len(rowsBySubversionPoint[want]) != 1 {
+			t.Fatalf("missing exact patch row %q in %#v", want, rowsBySubversionPoint)
+		}
+	}
+
+	if len(rowsBySubversionPoint) != 7 {
+		t.Fatalf("rowsBySubversionPoint = %#v, want exactly the seven supported exact patch rows", rowsBySubversionPoint)
+	}
+
+	if len(rowsBySubversionPoint["patch sidecars on workload default/fox-admin"]) > 0 {
+		t.Fatalf("unexpected sidecar-specific row in %#v", rowsBySubversionPoint)
 	}
 }
 
 func TestBuildSelectedChainPayloadBuildsExactServiceAccountSwitchRowWhenOneStrongerCandidateIsVisible(t *testing.T) {
 	namespace := "default"
-	payload, err := buildSelectedChainPayload(stubInventoryProvider{
-		metadataContext: model.MetadataContext{
-			ContextName: "lab-cluster",
-			ClusterName: "lab-cluster",
-			Namespace:   namespace,
+	payload, err := buildSelectedChainPayload(workloadIdentityPivotProviderStub(
+		namespace,
+		[]model.Workload{
+			testPodWorkload(workloadSpec{
+				Name:               "web",
+				Namespace:          namespace,
+				ServiceAccountName: "web",
+				Images:             []string{"nginx:1.27"},
+			}),
+			testPodWorkload(workloadSpec{
+				Name:               "fox-admin",
+				Namespace:          namespace,
+				ServiceAccountName: "fox-admin",
+				Images:             []string{"ghcr.io/example/fox-admin:latest"},
+			}),
+			testPodWorkload(workloadSpec{
+				Name:               "builder",
+				Namespace:          namespace,
+				ServiceAccountName: "builder",
+				Images:             []string{"ghcr.io/example/builder:latest"},
+			}),
 		},
-		whoamiData: model.WhoAmIData{
-			CurrentIdentity: model.CurrentIdentity{
-				Label:      "fox-operator",
-				Kind:       "User",
-				Confidence: "direct",
-			},
+		[]model.ServiceAccount{
+			testServiceAccount(serviceAccountSpec{Name: "web", Namespace: namespace}),
+			testServiceAccount(serviceAccountSpec{Name: "fox-admin", Namespace: namespace}),
+			testServiceAccount(serviceAccountSpec{Name: "builder", Namespace: namespace}),
 		},
-		workloadsData: model.WorkloadsData{
-			WorkloadAssets: []model.Workload{
-				{
-					ID:                 "pod:default:web",
-					Name:               "web",
-					Namespace:          namespace,
-					Kind:               "Pod",
-					ServiceAccountName: "web",
-					Images:             []string{"nginx:1.27"},
-				},
-				{
-					ID:                 "pod:default:fox-admin",
-					Name:               "fox-admin",
-					Namespace:          namespace,
-					Kind:               "Pod",
-					ServiceAccountName: "fox-admin",
-					Images:             []string{"ghcr.io/example/fox-admin:latest"},
-				},
-				{
-					ID:                 "pod:default:builder",
-					Name:               "builder",
-					Namespace:          namespace,
-					Kind:               "Pod",
-					ServiceAccountName: "builder",
-					Images:             []string{"ghcr.io/example/builder:latest"},
-				},
-			},
+		[]model.RBACGrant{
+			testCurrentSessionWorkloadActionGrant(namespace, "patch", "pods", "can patch pods"),
+			testServiceAccountGrant(namespace, "fox-admin", "fox-admin-cluster-admin", "cluster-wide", "admin-like wildcard access"),
+			testServiceAccountGrant(namespace, "builder", "builder-workloads", "namespace/default", "change workloads"),
 		},
-		serviceAccountsData: model.ServiceAccountsData{
-			ServiceAccounts: []model.ServiceAccount{
-				{
-					ID:        "serviceaccount:default:web",
-					Name:      "web",
-					Namespace: namespace,
-				},
-				{
-					ID:        "serviceaccount:default:fox-admin",
-					Name:      "fox-admin",
-					Namespace: namespace,
-				},
-				{
-					ID:        "serviceaccount:default:builder",
-					Name:      "builder",
-					Namespace: namespace,
-				},
-			},
-		},
-		rbacData: model.RBACData{
-			RoleGrants: []model.RBACGrant{
-				{
-					ID:             "grant:user:patch-pods",
-					BindingName:    "user-patch-pods",
-					Scope:          "namespace/default",
-					SubjectKind:    "User",
-					SubjectName:    "fox-operator",
-					EvidenceStatus: "direct",
-					WorkloadActions: []model.WorkloadAction{
-						{
-							Verb:            "patch",
-							TargetGroup:     "pods",
-							TargetResources: []string{"pods"},
-							Summary:         "can patch pods",
-						},
-					},
-				},
-				{
-					ID:               "grant:sa:cluster-admin",
-					BindingName:      "fox-admin-cluster-admin",
-					Scope:            "cluster-wide",
-					SubjectKind:      "ServiceAccount",
-					SubjectName:      "fox-admin",
-					SubjectNamespace: &namespace,
-					EvidenceStatus:   "direct",
-					DangerousRights:  []string{"admin-like wildcard access"},
-				},
-				{
-					ID:               "grant:sa:builder-workloads",
-					BindingName:      "builder-workloads",
-					Scope:            "namespace/default",
-					SubjectKind:      "ServiceAccount",
-					SubjectName:      "builder",
-					SubjectNamespace: &namespace,
-					EvidenceStatus:   "direct",
-					DangerousRights:  []string{"change workloads"},
-				},
-			},
-		},
-	}, provider.QueryOptions{}, "workload-identity-pivot")
+	), provider.QueryOptions{}, "workload-identity-pivot")
 	if err != nil {
 		t.Fatalf("buildSelectedChainPayload() error = %v", err)
 	}
@@ -1350,6 +1295,109 @@ func TestRbacTableOutputStaysOperatorReadable(t *testing.T) {
 	}
 }
 
+type workloadSpec struct {
+	Name               string
+	Namespace          string
+	ServiceAccountName string
+	Images             []string
+	Command            []string
+	Args               []string
+	EnvNames           []string
+	MountedSecretRefs  []string
+	MountedConfigRefs  []string
+	InitContainers     []string
+	Sidecars           []string
+}
+
+func testPodWorkload(spec workloadSpec) model.Workload {
+	return model.Workload{
+		ID:                 "pod:" + spec.Namespace + ":" + spec.Name,
+		Kind:               "Pod",
+		Name:               spec.Name,
+		Namespace:          spec.Namespace,
+		ServiceAccountName: spec.ServiceAccountName,
+		Images:             spec.Images,
+		Command:            spec.Command,
+		Args:               spec.Args,
+		EnvNames:           spec.EnvNames,
+		MountedSecretRefs:  spec.MountedSecretRefs,
+		MountedConfigRefs:  spec.MountedConfigRefs,
+		InitContainers:     spec.InitContainers,
+		Sidecars:           spec.Sidecars,
+	}
+}
+
+type serviceAccountSpec struct {
+	Name      string
+	Namespace string
+}
+
+func testServiceAccount(spec serviceAccountSpec) model.ServiceAccount {
+	return model.ServiceAccount{
+		ID:        "serviceaccount:" + spec.Namespace + ":" + spec.Name,
+		Name:      spec.Name,
+		Namespace: spec.Namespace,
+	}
+}
+
+func testCurrentSessionWorkloadActionGrant(namespace, verb, targetGroup, summary string) model.RBACGrant {
+	return model.RBACGrant{
+		ID:             "grant:user:" + verb + "-" + targetGroup,
+		BindingName:    "user-" + verb + "-" + targetGroup,
+		Scope:          "namespace/" + namespace,
+		SubjectKind:    "User",
+		SubjectName:    "fox-operator",
+		EvidenceStatus: "direct",
+		WorkloadActions: []model.WorkloadAction{
+			{
+				Verb:            verb,
+				TargetGroup:     targetGroup,
+				TargetResources: []string{targetGroup},
+				Summary:         summary,
+			},
+		},
+	}
+}
+
+func testServiceAccountGrant(namespace, name, bindingName, scope string, dangerousRights ...string) model.RBACGrant {
+	return model.RBACGrant{
+		ID:               "grant:sa:" + bindingName,
+		BindingName:      bindingName,
+		Scope:            scope,
+		SubjectKind:      "ServiceAccount",
+		SubjectName:      name,
+		SubjectNamespace: &namespace,
+		EvidenceStatus:   "direct",
+		DangerousRights:  dangerousRights,
+	}
+}
+
+func workloadIdentityPivotProviderStub(namespace string, workloads []model.Workload, serviceAccounts []model.ServiceAccount, grants []model.RBACGrant) stubInventoryProvider {
+	return stubInventoryProvider{
+		metadataContext: model.MetadataContext{
+			ContextName: "lab-cluster",
+			ClusterName: "lab-cluster",
+			Namespace:   namespace,
+		},
+		whoamiData: model.WhoAmIData{
+			CurrentIdentity: model.CurrentIdentity{
+				Label:      "fox-operator",
+				Kind:       "User",
+				Confidence: "direct",
+			},
+		},
+		workloadsData: model.WorkloadsData{
+			WorkloadAssets: workloads,
+		},
+		serviceAccountsData: model.ServiceAccountsData{
+			ServiceAccounts: serviceAccounts,
+		},
+		rbacData: model.RBACData{
+			RoleGrants: grants,
+		},
+	}
+}
+
 func testFixtureDir(t *testing.T) string {
 	t.Helper()
 	return absPath(t, filepath.Join("..", "..", "testdata", "fixtures", "lab_cluster"))
@@ -1395,6 +1443,18 @@ func requireMap(t *testing.T, value any) map[string]any {
 		t.Fatalf("value = %T, want map[string]any", value)
 	}
 	return mapping
+}
+
+func chainRowsBySubversionPoint(t *testing.T, rows []any) map[string][]map[string]any {
+	t.Helper()
+
+	grouped := make(map[string][]map[string]any, len(rows))
+	for _, raw := range rows {
+		row := requireMap(t, raw)
+		subversionPoint, _ := row["subversion_point"].(string)
+		grouped[subversionPoint] = append(grouped[subversionPoint], row)
+	}
+	return grouped
 }
 
 func normalizeGeneratedAt(t *testing.T, payload map[string]any) map[string]any {

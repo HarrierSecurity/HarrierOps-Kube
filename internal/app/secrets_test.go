@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -143,17 +144,20 @@ func TestSecretsTableOutputStaysOperatorReadable(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := normalizedTableText(stdout.String())
+	rawRendered := stdout.String()
+	rendered := normalizedTableText(rawRendered)
 	for _, want := range []string{
 		"priority",
 		"story",
 		"service-account secret:",
-		"fox-admin-token",
 		"image pull secret: regcred",
 		"container registry",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("table output missing %q in %q", want, rendered)
 		}
+	}
+	if !regexp.MustCompile(`(?s)service-account secret: fox-.{0,160}?admin-token`).MatchString(rawRendered) {
+		t.Fatalf("table output missing wrapped fox-admin-token shape in %q", rawRendered)
 	}
 }

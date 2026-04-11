@@ -42,18 +42,30 @@ func TestEvaluateWorkloadIdentityDefaultRowAllowsTask12SafeDefaults(t *testing.T
 }
 
 func TestEvaluateWorkloadIdentityDefaultRowAllowsExactEnvPatchRowsOnceAllGatesAreMet(t *testing.T) {
-	got := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
-		Kind:                        WorkloadIdentityRowPatchSpecificSurface,
-		ExactActionProven:           true,
-		VisibleSurface:              "env",
-		VisibilityTier:              "high",
-		ConfidenceBoundaryAvailable: true,
-	})
-	if !got.AllowedDefault {
-		t.Fatalf("AllowedDefault = false, want true: %s", got.Reason)
-	}
-	if got.SuppressDefault {
-		t.Fatalf("SuppressDefault = true, want false: %s", got.Reason)
+	for _, surface := range []string{
+		"image",
+		"command",
+		"args",
+		"env",
+		"mounted secret refs",
+		"mounted config refs",
+		"init containers",
+	} {
+		t.Run(surface, func(t *testing.T) {
+			got := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+				Kind:                        WorkloadIdentityRowPatchSpecificSurface,
+				ExactActionProven:           true,
+				VisibleSurface:              surface,
+				VisibilityTier:              "high",
+				ConfidenceBoundaryAvailable: true,
+			})
+			if !got.AllowedDefault {
+				t.Fatalf("AllowedDefault = false, want true: %s", got.Reason)
+			}
+			if got.SuppressDefault {
+				t.Fatalf("SuppressDefault = true, want false: %s", got.Reason)
+			}
+		})
 	}
 }
 

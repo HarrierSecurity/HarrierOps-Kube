@@ -121,12 +121,19 @@ Later depth surface:
 
 HarrierOps Kube expects existing Kubernetes access.
 It is not a login manager or a custom auth flow.
+It uses its own Kubernetes API wrapper/provider layer for collection rather than shelling out to
+`kubectl`.
 
 The intended operator path is the Kubernetes access you already have:
 
-- the current working `kubectl` context
+- the current Kubernetes context you would normally use
 - a `kubeconfig` file, usually from `~/.kube/config`
 - `KUBECONFIG` when it points to a different config path
+
+In practice, that means HarrierOps Kube reads the same kubeconfig and context information you
+already use, then talks directly to the Kubernetes API through its own client layer.
+`kubectl` is still a useful sanity check, but it is no longer the collection engine behind the
+tool.
 
 It also assumes the current machine can reach the Kubernetes API it is trying to use.
 If the `kubeconfig` points to a private endpoint, you still need network reachability from the
@@ -134,12 +141,19 @@ current host.
 
 ## Current Runtime Note
 
-The current build is fixture-backed while the live `kubectl` collectors are rebuilt.
-If you want repeatable local output today, set `HARRIEROPS_KUBE_FIXTURE_DIR`:
+The normal path is live API-backed collection from your kubeconfig and current scope.
+If you want repeatable example output from the repo fixtures instead, set
+`HARRIEROPS_KUBE_FIXTURE_DIR`:
 
 ```bash
 HARRIEROPS_KUBE_FIXTURE_DIR=testdata/fixtures/lab_cluster \
   go run ./cmd/harrierops-kube whoami --output table
+```
+
+Live example:
+
+```bash
+go run ./cmd/harrierops-kube whoami --output table
 ```
 
 The command surface and output contracts match the operator-facing command set above.

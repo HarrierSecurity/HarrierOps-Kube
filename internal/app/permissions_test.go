@@ -633,16 +633,20 @@ func TestPermissionsTableOutputExplainsBlockedIdentity(t *testing.T) {
 		t.Fatalf("output.Render() error = %v", err)
 	}
 
+	normalized := normalizedTableText(rendered)
 	for _, want := range []string{
 		"harrierops-kube permissions",
 		"info",
 		"No visible current-session capability paths were confirmed from current scope.",
-		"Issues:",
-		"visibility (permissions.identity): Current session identity is not visible from current credentials, so current-foothold capability triage is incomplete.",
+		"Issues",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("table output missing %q in %q", want, rendered)
 		}
+	}
+	wantIssue := "visibility (permissions.identity): Current session identity is not visible from current credentials, so current-foothold capability triage is incomplete."
+	if !strings.Contains(normalized, wantIssue) {
+		t.Fatalf("normalized table output missing %q in %q", wantIssue, normalized)
 	}
 }
 
