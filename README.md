@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/kubelogo.png" alt="HarrierOps Kube logo" width="320" />
+</p>
+
 # HarrierOps Kube
 
 Find attack paths, exposed workloads, and control-expansion opportunities in Kubernetes before you drown in objects.
