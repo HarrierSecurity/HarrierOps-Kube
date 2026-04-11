@@ -139,7 +139,7 @@ func enrichServiceAccountPaths(
 			workloadLabel := workload.Namespace + "/" + workload.Name
 			relatedWorkloads = append(relatedWorkloads, workloadLabel)
 
-			if isRiskyWorkload(workload) {
+			if model.IsRiskyWorkload(workload) {
 				riskyWorkloads = append(riskyWorkloads, workloadLabel)
 			}
 

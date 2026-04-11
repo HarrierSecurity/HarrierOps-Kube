@@ -3,13 +3,13 @@
   "current_behavior": "Family overview and grouped runner. Use `harrierops-kube chains` to review path families, then `harrierops-kube chains <family>` to run one family from current scope.",
   "families": [
     {
-      "allowed_claim": "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, or stronger control without the explicit control edge and confirmation basis.",
+      "allowed_claim": "Can claim that visible workload, service-account, permission, privesc, and secret evidence suggests a credible workload-linked identity pivot. Cannot claim successful execution, token use, stronger control, or sidecar insertion without the explicit control edge and confirmation basis.",
       "best_current_examples": [
         "workloads -> service-accounts -> permissions",
         "workloads -> service-accounts -> privesc",
         "secrets -> workloads -> service-accounts"
       ],
-      "current_gap": "The first runnable family now emits the bounded default row set, can add exact env-patch rows, and can surface service-account repointing as either one named stronger target or a bounded broader lead when exact target selection would overclaim; sidecar-specific rows still need follow-on eligibility work.",
+      "current_gap": "The first runnable family now emits the bounded default row set, can add exact env-patch rows, and can surface service-account repointing as either one named stronger target or a bounded broader lead when exact target selection would overclaim; sidecar-specific rows stay intentionally suppressed until current scope can prove honest insertion of a new sidecar rather than only changeable sidecar-related surfaces.",
       "family": "workload-identity-pivot",
       "internal_proof_ladder": [
         {
@@ -75,7 +75,7 @@
             "name",
             "namespace",
             "service_account_name",
-            "visible_patch_surfaces",
+            "patch_relevant_fields",
             "related_exposures",
             "public_exposure",
             "service_account_power",

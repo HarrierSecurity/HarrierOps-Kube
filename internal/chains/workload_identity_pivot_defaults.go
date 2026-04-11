@@ -146,10 +146,38 @@ func EvaluateWorkloadIdentityDefaultRow(inputs WorkloadIdentityDefaultRowInputs)
 			Reason:          "Keep out of default output until the family can either name one honest stronger target or keep the lead broader without misleading the operator.",
 		}
 	case WorkloadIdentityRowAddSidecar:
+		if !inputs.ExactActionProven {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the family can prove the exact workload-changing edge for sidecar insertion.",
+			}
+		}
+		if inputs.VisibleSurface != "sidecars" {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the family can tie this row to visible sidecar-related workload surfaces.",
+			}
+		}
+		if inputs.VisibilityTier == "" || inputs.VisibilityTier == "low" {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until visibility is strong enough that sidecar wording will not mislead.",
+			}
+		}
+		if !inputs.ConfidenceBoundaryAvailable {
+			return WorkloadIdentityDefaultRowDecision{
+				AllowedDefault:  false,
+				SuppressDefault: true,
+				Reason:          "Keep out of default output until the row can state a positive evidence boundary for sidecar-specific wording.",
+			}
+		}
 		return WorkloadIdentityDefaultRowDecision{
 			AllowedDefault:  false,
 			SuppressDefault: true,
-			Reason:          "Keep out of default output until the family can prove sidecar insertion without overstating workload behavior.",
+			Reason:          "Keep out of default output until the family can prove honest insertion of a new sidecar, not just changeable sidecar-related workload surfaces.",
 		}
 	default:
 		return WorkloadIdentityDefaultRowDecision{

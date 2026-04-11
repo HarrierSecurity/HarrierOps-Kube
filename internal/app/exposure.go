@@ -240,7 +240,7 @@ func summarizeBackendWorkload(workload model.Workload, serviceAccountByKey map[s
 	if serviceAccountPath.PowerSummary != "" {
 		identitySummary += " (" + serviceAccountPath.PowerSummary + ")"
 	}
-	return identitySummary, serviceAccountPath.PowerSummary, isRiskyWorkload(workload), workloadLooksOperationallyCentral(workload)
+	return identitySummary, serviceAccountPath.PowerSummary, model.IsRiskyWorkload(workload), workloadLooksOperationallyCentral(workload)
 }
 
 func strongestExposureBackend(workloads []model.Workload, serviceAccountByKey map[string]model.ServiceAccountPath) model.Workload {
@@ -273,7 +273,7 @@ func exposureBackendStrength(workload model.Workload, serviceAccountPath model.S
 	if serviceAccountPath.PowerSummary != "" {
 		score += 30
 	}
-	if isRiskyWorkload(workload) {
+	if model.IsRiskyWorkload(workload) {
 		score += 20
 	}
 	if workloadLooksOperationallyCentral(workload) {

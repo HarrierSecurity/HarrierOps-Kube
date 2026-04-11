@@ -9,6 +9,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	liptable "github.com/charmbracelet/lipgloss/table"
+
+	"harrierops-kube/internal/model"
 )
 
 var rowCollections = map[string]string{
@@ -715,7 +720,7 @@ func renderRBACTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "scope", "subject", "role", "binding", "signal"},
 		records,
-		"why it matters",
+		"attack angle",
 		"No visible RBAC grants were confirmed from current scope.",
 		"RBAC grant(s)",
 	)
@@ -760,7 +765,7 @@ func renderServiceAccountsTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "service_account", "workloads", "power", "token_posture"},
 		records,
-		"why it matters",
+		"attack angle",
 		"No visible service-account identity paths were confirmed from current scope.",
 		"service-account identity path(s)",
 	)
@@ -778,7 +783,7 @@ func renderWorkloadsTable(payload map[string]any) (string, error) {
 	records := make([]detailTableRecord, 0, len(rows))
 	for _, row := range rows {
 		workload := strings.TrimPrefix(stringify(row["namespace"])+"/"+stringify(row["name"]), "/")
-		exposure := "no visible exposure path"
+		exposure := "no exposed path seen"
 		if related, ok := row["related_exposures"].([]any); ok && len(related) > 0 {
 			parts := make([]string, 0, len(related))
 			for _, item := range related {
@@ -786,13 +791,9 @@ func renderWorkloadsTable(payload map[string]any) (string, error) {
 			}
 			exposure = strings.Join(parts, "; ")
 		}
-		execution := "no strong risky execution signal"
+		execution := "none seen"
 		if riskSignals, ok := row["risk_signals"].([]any); ok && len(riskSignals) > 0 {
-			parts := make([]string, 0, len(riskSignals))
-			for _, item := range riskSignals {
-				parts = append(parts, stringify(item))
-			}
-			execution = strings.Join(parts, "; ")
+			execution = strings.Join(stringifyAnySliceParts(riskSignals), "; ")
 		}
 		records = append(records, detailTableRecord{
 			columns: []string{
@@ -802,15 +803,15 @@ func renderWorkloadsTable(payload map[string]any) (string, error) {
 				exposure,
 				execution,
 			},
-			detail: stringify(row["why_care"]),
+			detail: workloadAttackAngle(row),
 		})
 	}
 
-	return renderDetailedTriageTable(
+	return renderDetailedTriageTableWithLipgloss(
 		payload,
 		[]string{"priority", "workload", "identity", "exposure", "execution"},
 		records,
-		"why it matters",
+		"attack angle",
 		"No visible workloads rose into triage from current scope.",
 		"workload row(s)",
 	)
@@ -864,7 +865,7 @@ func renderExposureTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "exposure", "targets", "attribution", "backend"},
 		records,
-		"why it matters",
+		"attack angle",
 		"No visible exposure paths were confirmed from current scope.",
 		"exposure path(s)",
 	)
@@ -886,6 +887,7 @@ func renderPermissionsTable(payload map[string]any) (string, error) {
 				stringify(row["priority"]),
 				stringify(row["subject"]),
 				stringify(row["subject_confidence"]),
+				stringify(row["evidence_source"]),
 				stringify(row["action_summary"]),
 				stringify(row["scope"]),
 				stringify(row["next_review"]),
@@ -896,9 +898,9 @@ func renderPermissionsTable(payload map[string]any) (string, error) {
 
 	return renderDetailedTriageTable(
 		payload,
-		[]string{"priority", "subject", "confidence", "action", "scope", "next_review"},
+		[]string{"priority", "subject", "confidence", "source", "action", "scope", "next_review"},
 		records,
-		"why it matters",
+		"attack angle",
 		"No visible current-session capability paths were confirmed from current scope.",
 		"current-session capability path(s)",
 	)
@@ -947,7 +949,7 @@ func renderSecretsTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "story", "path", "linkage", "target"},
 		records,
-		"why it matters",
+		"attack angle",
 		"No visible secret paths were confirmed from current scope.",
 		"secret path(s)",
 	)
@@ -984,10 +986,49 @@ func renderPrivescTable(payload map[string]any) (string, error) {
 		payload,
 		[]string{"priority", "class", "foothold", "action", "outcome"},
 		records,
-		"why it matters",
+		"attack angle",
 		"No visible escalation paths were confirmed from the current foothold.",
 		"escalation path(s)",
 	)
+}
+
+func stringifyAnySliceParts(value any) []string {
+	items, ok := value.([]any)
+	if !ok || len(items) == 0 {
+		return nil
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		part := stringify(item)
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return parts
+}
+
+func workloadAttackAngle(row map[string]any) string {
+	parts := []string{}
+	if stringify(row["public_exposure"]) == "true" {
+		parts = append(parts, "outside-facing traffic lands on this workload.")
+	} else if related := stringifyAnySlice(row["related_exposures"], "; "); related != "" {
+		parts = append(parts, "an exposed path is visible for this workload.")
+	}
+
+	if power := stringify(row["service_account_power"]); power != "" {
+		parts = append(parts, "this workload runs as an identity that "+power+".")
+	}
+
+	if riskSignals, ok := row["risk_signals"].([]any); ok && len(riskSignals) > 0 {
+		if translation := model.WorkloadRiskAttackAngle(stringifyAnySliceParts(riskSignals)); translation != "" {
+			parts = append(parts, translation)
+		}
+	}
+
+	if len(parts) == 0 {
+		return stringify(row["why_care"])
+	}
+	return strings.Join(parts, " ")
 }
 
 func renderUnicodeEmptyChainsTable(payload map[string]any) string {
@@ -1144,9 +1185,42 @@ func renderDetailedTriageTable(payload map[string]any, headers []string, records
 		return renderTriageEmptyState(payload, emptyMessage), nil
 	}
 
+	rawRecords := make([][]string, 0, len(records))
+	for _, record := range records {
+		rawRecords = append(rawRecords, record.columns)
+	}
+	widths := boundedASCIIWidths(headers, rawRecords)
+
 	var builder strings.Builder
 	for index, record := range records {
-		rendered, err := renderDetailedRecordTable(headers, record.columns, detailLabel, record.detail)
+		rendered, err := renderDetailedRecordTable(headers, widths, record.columns, detailLabel, record.detail)
+		if err != nil {
+			return "", err
+		}
+		builder.WriteString(rendered)
+		if index != len(records)-1 {
+			builder.WriteByte('\n')
+		}
+	}
+	appendIssueSection(&builder, payload)
+	appendTakeaway(&builder, takeawayNoun, records)
+	return builder.String(), nil
+}
+
+func renderDetailedTriageTableWithLipgloss(payload map[string]any, headers []string, records []detailTableRecord, detailLabel string, emptyMessage string, takeawayNoun string) (string, error) {
+	if len(records) == 0 {
+		return renderTriageEmptyState(payload, emptyMessage), nil
+	}
+
+	rawRecords := make([][]string, 0, len(records))
+	for _, record := range records {
+		rawRecords = append(rawRecords, record.columns)
+	}
+	widths := boundedASCIIWidths(headers, rawRecords)
+
+	var builder strings.Builder
+	for index, record := range records {
+		rendered, err := renderDetailedRecordTableWithLipgloss(headers, widths, record.columns, detailLabel, record.detail)
 		if err != nil {
 			return "", err
 		}
@@ -1286,12 +1360,10 @@ func renderUnicodeDetailTable(header string, width int, detail string) string {
 	return renderUnicodeTable(headers, widths, records)
 }
 
-func renderDetailedRecordTable(headers []string, record []string, detailLabel string, detail string) (string, error) {
+func renderDetailedRecordTable(headers []string, widths []int, record []string, detailLabel string, detail string) (string, error) {
 	if len(headers) == 0 {
 		return "", nil
 	}
-
-	widths := boundedASCIIWidths(headers, [][]string{record})
 
 	border := asciiTableBorder(widths)
 	var builder strings.Builder
@@ -1310,7 +1382,9 @@ func renderDetailedRecordTable(headers []string, record []string, detailLabel st
 	}
 
 	if detail != "" {
-		detailRendered, err := renderFullWidthDetailTable(asciiTableSpanWidth(widths), detailLabel, detail)
+		builder.WriteString(border)
+		builder.WriteByte('\n')
+		detailRendered, err := renderAttachedFullWidthDetailTable(asciiTableSpanWidth(widths), detailLabel, detail)
 		if err != nil {
 			return "", err
 		}
@@ -1321,6 +1395,71 @@ func renderDetailedRecordTable(headers []string, record []string, detailLabel st
 	builder.WriteString(border)
 	builder.WriteByte('\n')
 	return builder.String(), nil
+}
+
+func renderDetailedRecordTableWithLipgloss(headers []string, widths []int, record []string, detailLabel string, detail string) (string, error) {
+	if len(headers) == 0 {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	builder.WriteString(newDetailedRecordLipglossTable(widths).Headers(headers...).Row(record...).String())
+	if detail == "" {
+		return builder.String(), nil
+	}
+
+	builder.WriteByte('\n')
+	builder.WriteString(newAttachedDetailLipglossTable(asciiTableSpanWidth(widths), detailLabel).Row(detail).String())
+	return builder.String(), nil
+}
+
+func newDetailedRecordLipglossTable(widths []int) *liptable.Table {
+	return liptable.New().
+		Border(lipgloss.ASCIIBorder()).
+		BorderTop(true).
+		BorderBottom(true).
+		BorderLeft(true).
+		BorderRight(true).
+		BorderHeader(true).
+		BorderColumn(true).
+		BorderRow(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			return lipgloss.NewStyle().
+				Padding(0, 1).
+				Width(lipglossCellWidth(lipglossColumnWidth(widths, col)))
+		})
+}
+
+func newAttachedDetailLipglossTable(width int, label string) *liptable.Table {
+	return liptable.New().
+		Border(lipgloss.ASCIIBorder()).
+		BorderTop(false).
+		BorderBottom(true).
+		BorderLeft(true).
+		BorderRight(true).
+		BorderHeader(true).
+		BorderColumn(true).
+		BorderRow(false).
+		Headers(label).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			return lipgloss.NewStyle().
+				Padding(0, 1).
+				Width(lipglossCellWidth(width))
+		})
+}
+
+func lipglossColumnWidth(widths []int, index int) int {
+	if index < 0 || index >= len(widths) {
+		return 0
+	}
+	return widths[index]
+}
+
+func lipglossCellWidth(contentWidth int) int {
+	if contentWidth <= 0 {
+		return 0
+	}
+	return contentWidth + 2
 }
 
 func asciiTableBorder(widths []int) string {
@@ -1472,15 +1611,17 @@ func asciiTableSpanningRow(value string, width int) string {
 	return asciiTableDetailRow(value, width)
 }
 
-func renderFullWidthDetailTable(width int, label string, detail string) (string, error) {
+func renderAttachedFullWidthDetailTable(width int, label string, detail string) (string, error) {
 	if width <= 0 {
 		return "", nil
 	}
 
+	return renderAttachedFullWidthDetailTableBody(width, label, detail), nil
+}
+
+func renderAttachedFullWidthDetailTableBody(width int, label string, detail string) string {
 	var builder strings.Builder
 	border := asciiTableBorder([]int{width})
-	builder.WriteString(border)
-	builder.WriteByte('\n')
 	builder.WriteString(asciiTableSpanningRow(label, width))
 	builder.WriteByte('\n')
 	builder.WriteString(border)
@@ -1491,7 +1632,7 @@ func renderFullWidthDetailTable(width int, label string, detail string) (string,
 	}
 	builder.WriteString(border)
 	builder.WriteByte('\n')
-	return builder.String(), nil
+	return builder.String()
 }
 
 func asciiTableSpanWidth(widths []int) int {

@@ -235,7 +235,7 @@ func buildCommandPayload(command string, options Options, selection ...string) (
 		return buildChainsPayload(selectedFamily, options)
 	}
 
-	factProvider, err := provider.NewFixtureProvider(options.FixtureDir)
+	factProvider, err := provider.NewProvider(options.FixtureDir)
 	if err != nil {
 		return nil, err
 	}

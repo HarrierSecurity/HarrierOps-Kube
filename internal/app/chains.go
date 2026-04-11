@@ -16,7 +16,7 @@ func buildChainsPayload(selectedFamily string, options Options) (map[string]any,
 		return buildChainsScaffoldPayload(selectedFamily)
 	}
 
-	factProvider, err := provider.NewFixtureProvider(options.FixtureDir)
+	factProvider, err := provider.NewProvider(options.FixtureDir)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func buildSelectedChainPayload(factProvider provider.Provider, query provider.Qu
 
 	workloadRows := enrichWorkloadPaths(workloadData, serviceAccountData, exposureData, rbacData)
 	serviceAccountRows := enrichServiceAccountPaths(serviceAccountData.ServiceAccounts, workloadData, exposureData, rbacData)
-	permissionRows, permissionIssues := derivePermissionPaths(whoamiData.CurrentIdentity, rbacData.RoleGrants)
+	permissionRows, permissionIssues := loadPermissionPaths(factProvider, query, whoamiData.CurrentIdentity, rbacData.RoleGrants)
 	if permissionRows == nil {
 		permissionRows = []model.PermissionPath{}
 	}

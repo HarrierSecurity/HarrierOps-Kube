@@ -29,7 +29,7 @@ func buildPrivescPayload(factProvider provider.Provider, query provider.QueryOpt
 	workloadData, workloadIssue := loadWorkloadsSupportForPrivesc(factProvider, query)
 	exposureData, exposureIssue := loadExposuresSupportForPrivesc(factProvider, query)
 
-	permissionRows, permissionIssues := derivePermissionPaths(whoamiData.CurrentIdentity, rbacData.RoleGrants)
+	permissionRows, permissionIssues := loadPermissionPaths(factProvider, query, whoamiData.CurrentIdentity, rbacData.RoleGrants)
 	secretRows := enrichSecretPaths(serviceAccountData.ServiceAccounts, workloadData, exposureData, rbacData)
 	serviceAccountRows := enrichServiceAccountPaths(serviceAccountData.ServiceAccounts, workloadData, exposureData, rbacData)
 	workloadRows := enrichWorkloadPaths(workloadData, serviceAccountData, exposureData, rbacData)

@@ -54,8 +54,11 @@ func TestWorkloadsPayloadRanksJoinedWorkloadPaths(t *testing.T) {
 	if !strings.Contains(web["why_care"].(string), "public-looking exposure path") {
 		t.Fatalf("web-5d4f6 why_care = %q, want exposure wording", web["why_care"])
 	}
+	if got := requireStringSlice(t, web["patch_relevant_fields"]); !equalStrings(got, []string{"image", "service account"}) {
+		t.Fatalf("web-5d4f6 patch_relevant_fields = %#v, want image + service account", got)
+	}
 	if got := requireStringSlice(t, web["visible_patch_surfaces"]); !equalStrings(got, []string{"image", "service account"}) {
-		t.Fatalf("web-5d4f6 visible_patch_surfaces = %#v, want image + service account", got)
+		t.Fatalf("web-5d4f6 visible_patch_surfaces = %#v, want compatibility copy of patch_relevant_fields", got)
 	}
 
 	foxAdmin := findWorkloadRow(t, rows, "default", "fox-admin")
@@ -64,6 +67,22 @@ func TestWorkloadsPayloadRanksJoinedWorkloadPaths(t *testing.T) {
 	}
 	if !strings.Contains(foxAdmin["identity_summary"].(string), "cluster-wide admin-like access") {
 		t.Fatalf("fox-admin identity_summary = %v, want strong identity path", foxAdmin["identity_summary"])
+	}
+	if !strings.Contains(foxAdmin["why_care"].(string), "can reach the container runtime socket on the host") {
+		t.Fatalf("fox-admin why_care = %q, want strongest risk clue wording", foxAdmin["why_care"])
+	}
+	if got := requireStringSlice(t, foxAdmin["patch_relevant_fields"]); !equalStrings(got, []string{
+		"image",
+		"command",
+		"args",
+		"env",
+		"service account",
+		"mounted secret refs",
+		"mounted config refs",
+		"init containers",
+		"sidecars",
+	}) {
+		t.Fatalf("fox-admin patch_relevant_fields = %#v, want workload patch surfaces", got)
 	}
 	if got := requireStringSlice(t, foxAdmin["visible_patch_surfaces"]); !equalStrings(got, []string{
 		"image",
@@ -76,7 +95,7 @@ func TestWorkloadsPayloadRanksJoinedWorkloadPaths(t *testing.T) {
 		"init containers",
 		"sidecars",
 	}) {
-		t.Fatalf("fox-admin visible_patch_surfaces = %#v, want workload patch surfaces", got)
+		t.Fatalf("fox-admin visible_patch_surfaces = %#v, want compatibility copy of patch_relevant_fields", got)
 	}
 }
 
@@ -241,7 +260,7 @@ func TestWorkloadsTableOutputStaysOperatorReadable(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	rendered := stdout.String()
+	rendered := normalizedTableText(stdout.String())
 	for _, want := range []string{
 		"priority",
 		"workload",
@@ -249,6 +268,10 @@ func TestWorkloadsTableOutputStaysOperatorReadable(t *testing.T) {
 		"execution",
 		"default/fox-admin",
 		"cluster-wide admin-like access",
+		"no exposed path seen",
+		"container runtime socket",
+		"attack angle",
+		"this workload may be able to control other containers on the same machine.",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("table output missing %q in %q", want, rendered)

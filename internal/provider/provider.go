@@ -24,11 +24,16 @@ type Provider interface {
 	Exposures(QueryOptions) (model.ExposureData, error)
 }
 
+func NewProvider(fixtureDir string) (Provider, error) {
+	if fixtureDir != "" {
+		return NewFixtureProvider(fixtureDir)
+	}
+	return NewLiveProvider()
+}
+
 func NewFixtureProvider(fixtureDir string) (Provider, error) {
 	if fixtureDir == "" {
-		return nil, fmt.Errorf(
-			"live kubectl collection is not implemented yet; set HARRIEROPS_KUBE_FIXTURE_DIR to load reference fixtures",
-		)
+		return nil, fmt.Errorf("fixture provider requires HARRIEROPS_KUBE_FIXTURE_DIR")
 	}
 
 	return fixtureProvider{fixtureDir: fixtureDir}, nil
