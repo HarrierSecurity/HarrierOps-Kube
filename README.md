@@ -102,12 +102,16 @@ harrierops-kube workloads
 
 | Section | Commands |
 | --- | --- |
-| `core` | `inventory` |
-| `identity` | `whoami`, `rbac`, `service-accounts`, `permissions`, `privesc` |
-| `orchestration` | `chains` |
-| `workload` | `workloads` |
-| `exposure` | `exposure` |
-| `secrets` | `secrets` |
+| `core` | [`inventory`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Inventory) |
+| `identity` | [`whoami`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Whoami), [`rbac`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/RBAC), [`service-accounts`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Service-Accounts), [`permissions`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Permissions), [`privesc`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Privesc) |
+| `orchestration` | [`chains`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Chains) |
+| `workload` | [`workloads`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Workloads) |
+| `exposure` | [`exposure`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Exposure) |
+| `secrets` | [`secrets`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Secrets) |
+
+Implemented chain family:
+
+- [`workload-identity-pivot`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Workload-Identity-Pivot) via [`chains`](https://github.com/HarrierSecurity/HarrierOps-Kube/wiki/Chains)
 
 Later depth surface:
 
