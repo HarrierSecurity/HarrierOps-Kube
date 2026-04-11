@@ -131,6 +131,26 @@ func TestEvaluateWorkloadIdentityDefaultRowKeepsRiskierRowsOutByDefault(t *testi
 	}
 }
 
+func TestEvaluateWorkloadIdentityDefaultRowKeepsSidecarRowsOutUntilInsertionSemanticsAreHonest(t *testing.T) {
+	got := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
+		Kind:                        WorkloadIdentityRowAddSidecar,
+		ExactActionProven:           true,
+		VisibleSurface:              "sidecars",
+		VisibilityTier:              "high",
+		ConfidenceBoundaryAvailable: true,
+	})
+	if got.AllowedDefault {
+		t.Fatalf("AllowedDefault = true, want false: %s", got.Reason)
+	}
+	if !got.SuppressDefault {
+		t.Fatalf("SuppressDefault = false, want true: %s", got.Reason)
+	}
+	want := "Keep out of default output until the family can prove honest insertion of a new sidecar, not just changeable sidecar-related workload surfaces."
+	if got.Reason != want {
+		t.Fatalf("Reason = %q, want %q", got.Reason, want)
+	}
+}
+
 func TestEvaluateWorkloadIdentityDefaultRowAllowsExactServiceAccountSwitchRowsOnceAllGatesAreMet(t *testing.T) {
 	got := EvaluateWorkloadIdentityDefaultRow(WorkloadIdentityDefaultRowInputs{
 		Kind:                        WorkloadIdentityRowSwitchServiceAccount,

@@ -25,7 +25,7 @@ func buildPermissionsPayload(factProvider provider.Provider, query provider.Quer
 		return nil, err
 	}
 
-	rows, permissionIssues := derivePermissionPaths(whoamiData.CurrentIdentity, rbacData.RoleGrants)
+	rows, permissionIssues := loadPermissionPaths(factProvider, query, whoamiData.CurrentIdentity, rbacData.RoleGrants)
 	if rows == nil {
 		rows = []model.PermissionPath{}
 	}
@@ -39,6 +39,127 @@ func buildPermissionsPayload(factProvider provider.Provider, query provider.Quer
 		Permissions: rows,
 		Issues:      issues,
 	})
+}
+
+type currentSessionPermissionProvider interface {
+	CurrentSessionPermissions(provider.QueryOptions, model.CurrentIdentity) ([]model.PermissionPath, []model.Issue, error)
+}
+
+func loadPermissionPaths(
+	factProvider provider.Provider,
+	query provider.QueryOptions,
+	currentIdentity model.CurrentIdentity,
+	grants []model.RBACGrant,
+) ([]model.PermissionPath, []model.Issue) {
+	derivedRows, derivedIssues := derivePermissionPaths(currentIdentity, grants)
+
+	liveProvider, ok := factProvider.(currentSessionPermissionProvider)
+	if !ok {
+		return derivedRows, derivedIssues
+	}
+
+	directRows, directIssues, err := liveProvider.CurrentSessionPermissions(query, currentIdentity)
+	if err != nil {
+		return derivedRows, append(derivedIssues, model.Issue{
+			Kind:    "collection",
+			Scope:   "permissions.authorization",
+			Message: "Current scope could not confirm direct authorization-review surfaces, so capability rows fell back to RBAC-derived evidence.",
+		})
+	}
+
+	return mergePermissionRows(directRows, derivedRows), append(directIssues, derivedIssues...)
+}
+
+func mergePermissionRows(preferred []model.PermissionPath, fallback []model.PermissionPath) []model.PermissionPath {
+	merged := map[string]model.PermissionPath{}
+	order := []string{}
+
+	for _, row := range fallback {
+		key := permissionMergeKey(row)
+		if _, ok := merged[key]; !ok {
+			order = append(order, key)
+		}
+		merged[key] = row
+	}
+	for _, row := range preferred {
+		key := permissionMergeKey(row)
+		if existing, ok := merged[key]; ok {
+			merged[key] = mergePermissionEvidence(existing, row)
+			continue
+		}
+		order = append(order, key)
+		merged[key] = row
+	}
+
+	rows := make([]model.PermissionPath, 0, len(order))
+	for _, key := range order {
+		rows = append(rows, merged[key])
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if priorityOrder(rows[i].Priority) != priorityOrder(rows[j].Priority) {
+			return priorityOrder(rows[i].Priority) < priorityOrder(rows[j].Priority)
+		}
+		if permissionScopeRank(rows[i].Scope) != permissionScopeRank(rows[j].Scope) {
+			return permissionScopeRank(rows[i].Scope) > permissionScopeRank(rows[j].Scope)
+		}
+		if permissionActionScore(rows[i].ActionSummary) != permissionActionScore(rows[j].ActionSummary) {
+			return permissionActionScore(rows[i].ActionSummary) > permissionActionScore(rows[j].ActionSummary)
+		}
+		return rows[i].ActionSummary < rows[j].ActionSummary
+	})
+	return rows
+}
+
+func permissionMergeKey(row model.PermissionPath) string {
+	return strings.Join([]string{
+		row.Scope,
+		row.ActionSummary,
+		row.ActionVerb,
+		row.TargetGroup,
+	}, "|")
+}
+
+func mergePermissionEvidence(existing model.PermissionPath, preferred model.PermissionPath) model.PermissionPath {
+	merged := preferred
+	if merged.ActionVerb == "" {
+		merged.ActionVerb = existing.ActionVerb
+	}
+	if merged.TargetGroup == "" {
+		merged.TargetGroup = existing.TargetGroup
+	}
+	merged.TargetResources = mergeUniqueStrings(existing.TargetResources, preferred.TargetResources)
+	merged.RelatedBindings = mergeUniqueStrings(existing.RelatedBindings, preferred.RelatedBindings)
+	if merged.EvidenceSource == "" {
+		merged.EvidenceSource = existing.EvidenceSource
+	} else if existing.EvidenceSource != "" && existing.EvidenceSource != merged.EvidenceSource {
+		merged.EvidenceSource = mergeEvidenceSources(existing.EvidenceSource, merged.EvidenceSource)
+	}
+	if merged.WhyCare == "" {
+		merged.WhyCare = existing.WhyCare
+	}
+	if merged.NextReview == "" {
+		merged.NextReview = existing.NextReview
+	}
+	return merged
+}
+
+func mergeEvidenceSources(left string, right string) string {
+	sources := mergeUniqueStrings(strings.Split(left, " + "), strings.Split(right, " + "))
+	return strings.Join(sources, " + ")
+}
+
+func mergeUniqueStrings(left []string, right []string) []string {
+	seen := map[string]bool{}
+	merged := make([]string, 0, len(left)+len(right))
+	for _, item := range append(append([]string{}, left...), right...) {
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		merged = append(merged, item)
+	}
+	sort.Strings(merged)
+	return merged
 }
 
 type permissionAggregation struct {
@@ -126,6 +247,7 @@ func derivePermissionPaths(currentIdentity model.CurrentIdentity, grants []model
 			TargetResources:   aggregate.TargetResources,
 			ActionSummary:     aggregate.ActionSummary,
 			EvidenceStatus:    aggregate.EvidenceStatus,
+			EvidenceSource:    "RBAC-derived",
 			RelatedBindings:   aggregate.RelatedBindings,
 			Priority:          semanticPriority(aggregate.PriorityScore),
 			WhyCare:           aggregate.WhyCare,

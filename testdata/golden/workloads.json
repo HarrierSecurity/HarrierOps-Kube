@@ -102,6 +102,10 @@
       "risk_signals": [],
       "service_account_name": "web",
       "service_account_power": "can change workloads",
+      "patch_relevant_fields": [
+        "image",
+        "service account"
+      ],
       "visible_patch_surfaces": [
         "image",
         "service account"
@@ -121,15 +125,26 @@
       "public_exposure": false,
       "related_exposures": [],
       "risk_signals": [
-        "privileged",
-        "allows privilege escalation",
-        "mounts docker socket",
-        "mounts host paths",
-        "adds Linux capabilities",
-        "runs as root"
+        "workload can reach the container runtime socket on the host",
+        "workload mounts host directories",
+        "privileged container",
+        "workload allows privilege escalation",
+        "workload runs as root",
+        "workload adds Linux capabilities"
       ],
       "service_account_name": "fox-admin",
       "service_account_power": "has cluster-wide admin-like access",
+      "patch_relevant_fields": [
+        "image",
+        "command",
+        "args",
+        "env",
+        "service account",
+        "mounted secret refs",
+        "mounted config refs",
+        "init containers",
+        "sidecars"
+      ],
       "visible_patch_surfaces": [
         "image",
         "command",
@@ -141,7 +156,7 @@
         "init containers",
         "sidecars"
       ],
-      "why_care": "Workload rises because it has cluster-wide admin-like access, privileged."
+      "why_care": "Workload rises because it has cluster-wide admin-like access, can reach the container runtime socket on the host."
     },
     {
       "id": "pod:build:node-debug",
@@ -156,16 +171,20 @@
       "public_exposure": false,
       "related_exposures": [],
       "risk_signals": [
-        "uses host namespaces",
-        "mounts host paths"
+        "workload mounts host directories",
+        "workload shares host network, process, or IPC access"
       ],
       "service_account_name": "default",
       "service_account_power": "",
+      "patch_relevant_fields": [
+        "image",
+        "service account"
+      ],
       "visible_patch_surfaces": [
         "image",
         "service account"
       ],
-      "why_care": "Workload rises because it uses host namespaces."
+      "why_care": "Workload rises because it mounts host directories."
     }
   ]
 }

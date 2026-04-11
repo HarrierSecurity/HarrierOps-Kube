@@ -128,10 +128,11 @@ func enrichWorkloadPaths(
 		exposures := exposuresByWorkload[workloadLabel]
 
 		relatedExposures, publicExposure := summarizeWorkloadExposures(exposures)
-		riskSignals := summarizeWorkloadRiskSignals(workload)
+		riskSignals := model.WorkloadRiskSignals(workload)
 		identitySummary := deriveWorkloadIdentitySummary(workload, serviceAccountPath)
 		score := workloadPathScore(workload, serviceAccountPath, publicExposure, len(exposures), len(riskSignals))
 
+		visiblePatchSurfaces := visibleWorkloadPatchSurfaces(workload)
 		rows = append(rows, model.WorkloadPath{
 			ID:                   workload.ID,
 			Kind:                 workload.Kind,
@@ -141,7 +142,8 @@ func enrichWorkloadPaths(
 			IdentitySummary:      identitySummary,
 			ServiceAccountPower:  serviceAccountPath.PowerSummary,
 			Images:               workload.Images,
-			VisiblePatchSurfaces: visibleWorkloadPatchSurfaces(workload),
+			PatchRelevantFields:  append([]string(nil), visiblePatchSurfaces...),
+			VisiblePatchSurfaces: append([]string(nil), visiblePatchSurfaces...),
 			RelatedExposures:     relatedExposures,
 			PublicExposure:       publicExposure,
 			RiskSignals:          riskSignals,
@@ -198,10 +200,6 @@ func summarizeWorkloadExposures(exposures []model.Exposure) ([]string, bool) {
 	}
 	sort.Strings(summaries)
 	return summaries, publicExposure
-}
-
-func summarizeWorkloadRiskSignals(workload model.Workload) []string {
-	return workloadRiskSignals(workload)
 }
 
 func visibleWorkloadPatchSurfaces(workload model.Workload) []string {
@@ -299,7 +297,7 @@ func deriveWorkloadWhyCare(workload model.Workload, serviceAccountPath model.Ser
 		reasons = append(reasons, "runs as a named service account")
 	}
 	if len(riskSignals) > 0 {
-		reasons = append(reasons, riskSignals[0])
+		reasons = append(reasons, model.WorkloadWhyCareRiskPhrase(riskSignals[0]))
 	}
 	if workloadLooksOperationallyCentral(workload) {
 		reasons = append(reasons, "looks operationally central")

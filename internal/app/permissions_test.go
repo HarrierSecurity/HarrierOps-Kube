@@ -224,6 +224,216 @@ func TestPermissionsPayloadPrefersExactWorkloadActionsOverGenericBucket(t *testi
 	}
 }
 
+func TestPermissionsPayloadMergesDirectAuthorizationRowsWithRBACFallback(t *testing.T) {
+	payload, err := buildPermissionsPayload(stubDirectPermissionProvider{
+		stubInventoryProvider: stubInventoryProvider{
+			metadataContext: model.MetadataContext{ContextName: "ops", Namespace: "payments"},
+			whoamiData: model.WhoAmIData{
+				CurrentIdentity: model.CurrentIdentity{
+					Label:      "operator@example.com",
+					Kind:       "User",
+					Confidence: "direct",
+				},
+			},
+			rbacData: model.RBACData{
+				RoleGrants: []model.RBACGrant{
+					{
+						BindingName:     "operator-impersonate",
+						Scope:           "cluster-wide",
+						SubjectKind:     "User",
+						SubjectName:     "operator@example.com",
+						DangerousRights: []string{"impersonate serviceaccounts"},
+						EvidenceStatus:  "direct",
+					},
+					{
+						BindingName:     "operator-edit",
+						Scope:           "namespace/payments",
+						SubjectKind:     "User",
+						SubjectName:     "operator@example.com",
+						DangerousRights: []string{"change workloads"},
+						WorkloadActions: []model.WorkloadAction{
+							{
+								Verb:            "patch",
+								TargetGroup:     "workload-controllers",
+								TargetResources: []string{"deployments"},
+								Summary:         "can patch workload controllers",
+							},
+						},
+						EvidenceStatus: "direct",
+					},
+				},
+			},
+		},
+		directRows: []model.PermissionPath{
+			{
+				ID:                "direct:payments:patch-workload-controllers",
+				Subject:           "operator@example.com (current session)",
+				SubjectConfidence: "direct",
+				Scope:             "namespace/payments",
+				ActionVerb:        "patch",
+				TargetGroup:       "workload-controllers",
+				TargetResources:   []string{"cronjobs", "daemonsets", "deployments", "jobs", "statefulsets"},
+				ActionSummary:     "can patch workload controllers",
+				EvidenceStatus:    "direct",
+				EvidenceSource:    "authorization API",
+				Priority:          "medium",
+				WhyCare:           "Current session can patch workload controllers in namespace/payments directly from the authorization API.",
+				NextReview:        "workloads",
+			},
+		},
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildPermissionsPayload() error = %v", err)
+	}
+
+	rows, ok := payload["permissions"].([]any)
+	if !ok || len(rows) != 2 {
+		t.Fatalf("permissions = %#v, want two merged rows", payload["permissions"])
+	}
+
+	seen := map[string]map[string]any{}
+	for _, row := range rows {
+		mapping := requireMap(t, row)
+		seen[mapping["action_summary"].(string)] = mapping
+	}
+
+	patchRow, ok := seen["can patch workload controllers"]
+	if !ok {
+		t.Fatalf("permissions = %#v, want direct patch row", rows)
+	}
+	if patchRow["why_care"] != "Current session can patch workload controllers in namespace/payments directly from the authorization API." {
+		t.Fatalf("patch why_care = %q, want direct authorization wording", patchRow["why_care"])
+	}
+	if patchRow["evidence_source"] != "RBAC-derived + authorization API" && patchRow["evidence_source"] != "authorization API + RBAC-derived" {
+		t.Fatalf("patch evidence_source = %q, want merged provenance", patchRow["evidence_source"])
+	}
+	if _, ok := seen["can impersonate serviceaccounts"]; !ok {
+		t.Fatalf("permissions = %#v, want fallback impersonation row", rows)
+	}
+}
+
+func TestPermissionsPayloadKeepsFallbackExplanationWhenLiveRowIsThinner(t *testing.T) {
+	payload, err := buildPermissionsPayload(stubDirectPermissionProvider{
+		stubInventoryProvider: stubInventoryProvider{
+			metadataContext: model.MetadataContext{ContextName: "ops", Namespace: "payments"},
+			whoamiData: model.WhoAmIData{
+				CurrentIdentity: model.CurrentIdentity{
+					Label:      "operator@example.com",
+					Kind:       "User",
+					Confidence: "direct",
+				},
+			},
+			rbacData: model.RBACData{
+				RoleGrants: []model.RBACGrant{
+					{
+						BindingName:     "operator-edit",
+						Scope:           "namespace/payments",
+						SubjectKind:     "User",
+						SubjectName:     "operator@example.com",
+						DangerousRights: []string{"change workloads"},
+						WorkloadActions: []model.WorkloadAction{
+							{
+								Verb:            "patch",
+								TargetGroup:     "workload-controllers",
+								TargetResources: []string{"deployments"},
+								Summary:         "can patch workload controllers",
+							},
+						},
+						EvidenceStatus: "direct",
+					},
+				},
+			},
+		},
+		directRows: []model.PermissionPath{
+			{
+				ID:                "direct:payments:patch-workload-controllers",
+				Subject:           "operator@example.com (current session)",
+				SubjectConfidence: "direct",
+				Scope:             "namespace/payments",
+				ActionVerb:        "patch",
+				TargetGroup:       "workload-controllers",
+				TargetResources:   []string{"daemonsets", "statefulsets"},
+				ActionSummary:     "can patch workload controllers",
+				EvidenceStatus:    "direct",
+				EvidenceSource:    "authorization API",
+				Priority:          "medium",
+			},
+		},
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildPermissionsPayload() error = %v", err)
+	}
+
+	rows, ok := payload["permissions"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("permissions = %#v, want one merged row", payload["permissions"])
+	}
+
+	row := requireMap(t, rows[0])
+	if row["why_care"] == "" {
+		t.Fatalf("why_care = %q, want fallback explanation to survive merge", row["why_care"])
+	}
+	if row["next_review"] != "workloads" {
+		t.Fatalf("next_review = %q, want fallback next_review", row["next_review"])
+	}
+	targetResources := requireStringSlice(t, row["target_resources"])
+	if !equalStrings(targetResources, []string{"daemonsets", "deployments", "statefulsets"}) {
+		t.Fatalf("target_resources = %#v, want merged target resources", targetResources)
+	}
+}
+
+func TestPermissionsPayloadKeepsDistinctRowsWhenActionShapeDiffers(t *testing.T) {
+	payload, err := buildPermissionsPayload(stubDirectPermissionProvider{
+		stubInventoryProvider: stubInventoryProvider{
+			metadataContext: model.MetadataContext{ContextName: "ops", Namespace: "payments"},
+			whoamiData: model.WhoAmIData{
+				CurrentIdentity: model.CurrentIdentity{
+					Label:      "operator@example.com",
+					Kind:       "User",
+					Confidence: "direct",
+				},
+			},
+			rbacData: model.RBACData{
+				RoleGrants: []model.RBACGrant{
+					{
+						BindingName:     "operator-secrets",
+						Scope:           "namespace/payments",
+						SubjectKind:     "User",
+						SubjectName:     "operator@example.com",
+						DangerousRights: []string{"read secrets"},
+						EvidenceStatus:  "direct",
+					},
+				},
+			},
+		},
+		directRows: []model.PermissionPath{
+			{
+				ID:                "direct:payments:patch-pods",
+				Subject:           "operator@example.com (current session)",
+				SubjectConfidence: "direct",
+				Scope:             "namespace/payments",
+				ActionVerb:        "patch",
+				TargetGroup:       "pods",
+				TargetResources:   []string{"pods"},
+				ActionSummary:     "can patch pods",
+				EvidenceStatus:    "direct",
+				EvidenceSource:    "authorization API",
+				Priority:          "high",
+				WhyCare:           "Current session can patch pods in namespace/payments directly from the authorization API.",
+				NextReview:        "workloads",
+			},
+		},
+	}, provider.QueryOptions{})
+	if err != nil {
+		t.Fatalf("buildPermissionsPayload() error = %v", err)
+	}
+
+	rows, ok := payload["permissions"].([]any)
+	if !ok || len(rows) != 2 {
+		t.Fatalf("permissions = %#v, want two distinct rows", payload["permissions"])
+	}
+}
+
 func TestPermissionsPayloadRecognizesNodeAndPolicyCapabilityFamilies(t *testing.T) {
 	payload, err := buildPermissionsPayload(stubInventoryProvider{
 		metadataContext: model.MetadataContext{ContextName: "ops", Namespace: "kube-system"},
@@ -434,4 +644,15 @@ func TestPermissionsTableOutputExplainsBlockedIdentity(t *testing.T) {
 			t.Fatalf("table output missing %q in %q", want, rendered)
 		}
 	}
+}
+
+type stubDirectPermissionProvider struct {
+	stubInventoryProvider
+	directRows   []model.PermissionPath
+	directIssues []model.Issue
+	directErr    error
+}
+
+func (s stubDirectPermissionProvider) CurrentSessionPermissions(provider.QueryOptions, model.CurrentIdentity) ([]model.PermissionPath, []model.Issue, error) {
+	return s.directRows, s.directIssues, s.directErr
 }

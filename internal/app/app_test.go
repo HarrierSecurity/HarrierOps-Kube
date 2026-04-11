@@ -1339,7 +1339,7 @@ func TestRbacTableOutputStaysOperatorReadable(t *testing.T) {
 		"subject",
 		"role",
 		"signal",
-		"why it matters",
+		"attack angle",
 		"cluster-admin*",
 		"ServiceAccount",
 		"default/fox-admin",

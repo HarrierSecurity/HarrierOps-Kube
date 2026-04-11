@@ -273,7 +273,7 @@ func buildExternalSecretDependencyPath(workload model.Workload, publicExposure b
 	if publicExposure {
 		score += 20
 	}
-	if isRiskyWorkload(workload) {
+	if model.IsRiskyWorkload(workload) {
 		score += 10
 	}
 	if workloadLooksOperationallyCentral(workload) {
@@ -311,7 +311,7 @@ func summarizeSecretWorkloadLinkage(attachedWorkloads []model.Workload, publicEx
 		if publicExposureByWorkload[workloadLabel] {
 			exposed++
 		}
-		if isRiskyWorkload(workload) {
+		if model.IsRiskyWorkload(workload) {
 			risky++
 		}
 		if workloadLooksOperationallyCentral(workload) {
@@ -381,7 +381,7 @@ func deriveExternalSecretWhyCare(workload model.Workload, publicExposure bool) s
 	if publicExposure {
 		reasons = append(reasons, "sits behind a public-looking workload path")
 	}
-	if isRiskyWorkload(workload) {
+	if model.IsRiskyWorkload(workload) {
 		reasons = append(reasons, "touches risky execution context")
 	}
 	if workloadLooksOperationallyCentral(workload) {

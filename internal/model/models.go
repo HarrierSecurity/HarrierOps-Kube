@@ -216,15 +216,18 @@ type WorkloadsData struct {
 }
 
 type WorkloadPath struct {
-	ID                   string   `json:"id"`
-	Kind                 string   `json:"kind"`
-	Name                 string   `json:"name"`
-	Namespace            string   `json:"namespace"`
-	ServiceAccountName   string   `json:"service_account_name"`
-	IdentitySummary      string   `json:"identity_summary"`
-	ServiceAccountPower  string   `json:"service_account_power"`
-	Images               []string `json:"images"`
-	VisiblePatchSurfaces []string `json:"visible_patch_surfaces"`
+	ID                  string   `json:"id"`
+	Kind                string   `json:"kind"`
+	Name                string   `json:"name"`
+	Namespace           string   `json:"namespace"`
+	ServiceAccountName  string   `json:"service_account_name"`
+	IdentitySummary     string   `json:"identity_summary"`
+	ServiceAccountPower string   `json:"service_account_power"`
+	Images              []string `json:"images"`
+	// Canonical family field name going forward.
+	PatchRelevantFields []string `json:"patch_relevant_fields,omitempty"`
+	// Deprecated compatibility alias for existing fixtures and downstream consumers.
+	VisiblePatchSurfaces []string `json:"visible_patch_surfaces,omitempty"`
 	RelatedExposures     []string `json:"related_exposures"`
 	PublicExposure       bool     `json:"public_exposure"`
 	RiskSignals          []string `json:"risk_signals"`
@@ -275,6 +278,7 @@ type PermissionPath struct {
 	TargetResources   []string `json:"target_resources,omitempty"`
 	ActionSummary     string   `json:"action_summary"`
 	EvidenceStatus    string   `json:"evidence_status"`
+	EvidenceSource    string   `json:"evidence_source,omitempty"`
 	RelatedBindings   []string `json:"related_bindings"`
 	Priority          string   `json:"priority"`
 	WhyCare           string   `json:"why_care"`
